@@ -89,12 +89,14 @@ export default function Editor({
   const change = async (mutate: (doc: ResumeDocument) => ResumeDocument) => {
     try {
       await mutateResume(document.id, mutate)
+      return true
     } catch (e) {
       notify(errorMessage(e), 'error')
+      return false
     }
   }
   const write = (target: Target, value: string, before: string) => {
-    void change((doc) => {
+    return change((doc) => {
       if (readTarget(doc.content, target) !== before)
         throw new Error('此字段已在其他操作中更新，请重新核对后编辑。')
       return { ...doc, content: writeTarget(doc.content, target, value) }
@@ -811,7 +813,10 @@ export default function Editor({
         </div>
         <div className={`preview-panel ${!showPreview ? 'mobile-hidden-preview' : ''}`}>
           <div className="preview-toolbar">
-            <span>实时预览</span>
+            <div className="preview-editing-hint">
+              <span>实时预览 · 点击文字编辑</span>
+              <small>离开后保存 · Esc 取消</small>
+            </div>
             <label>
               <span className="sr-only">简历模板</span>
               <NativeSelect
@@ -829,7 +834,7 @@ export default function Editor({
             <span className="paper-size">A4</span>
           </div>
           <div className="paper-canvas">
-            <ResumePaper document={document} />
+            <ResumePaper key={document.id} document={document} onEdit={write} />
           </div>
           <p className="preview-footnote">导出使用浏览器打印，可选择“保存为 PDF”。长内容会自动分页。</p>
         </div>

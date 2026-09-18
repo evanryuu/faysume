@@ -1506,6 +1506,75 @@ select {
   padding: 4px 6px;
   border-radius: 3px;
 }
+.preview-editing-hint {
+  display: grid;
+  gap: 3px;
+}
+.preview-editing-hint small {
+  font-size: 9px;
+}
+.paper-editable {
+  position: relative;
+  display: block;
+  min-width: 1ch;
+  min-height: 1em;
+  border-radius: 2px;
+  outline: 1px solid transparent;
+  outline-offset: 3px;
+  cursor: text;
+  white-space: pre-wrap;
+}
+.paper-editable:hover {
+  outline-color: #b9cbb0;
+}
+.paper-editable:focus-within {
+  outline: 2px solid #78946b;
+  background: #78946b12;
+}
+.paper-editable:focus-within .paper-editable-mirror {
+  visibility: hidden;
+}
+.paper-editable-control {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  line-height: inherit;
+  overflow-wrap: inherit;
+  resize: none;
+  overflow: hidden;
+  box-shadow: none;
+  outline: none;
+  opacity: 0;
+}
+.paper-editable-control:focus {
+  border: 0;
+  box-shadow: none;
+  outline: none;
+  opacity: 1;
+}
+.paper-editable-control::placeholder {
+  color: inherit;
+  opacity: 0.5;
+}
+.paper-date .paper-editable-mirror {
+  display: inline;
+}
+.paper-date .paper-editable-inline,
+.paper-editable-inline {
+  display: inline-block;
+}
 .paper-canvas {
   padding: 17px 27px 26px;
 }
@@ -2420,6 +2489,16 @@ select {
 }
 
 @media print {
+  .paper-editable {
+    outline: none !important;
+    background: transparent !important;
+  }
+  .paper-editable-control {
+    display: none !important;
+  }
+  .paper-editable .paper-editable-mirror {
+    visibility: visible !important;
+  }
   @page {
     size: A4 portrait;
     margin: 14mm;
