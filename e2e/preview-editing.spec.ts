@@ -1,5 +1,9 @@
 import { test, expect } from '@playwright/test'
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => sessionStorage.setItem('faysume.preview-mode', 'edit'))
+})
+
 test('immediate consecutive edits do not conflict with their own pending save', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: '空白创建', exact: true }).click()

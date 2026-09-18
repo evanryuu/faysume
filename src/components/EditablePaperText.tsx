@@ -1,4 +1,27 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+
+/** Shared by editing, pagination and print, including preserved trailing blank lines. */
+export function PaperText({
+  value,
+  multiline = false,
+  inline = false,
+  children,
+}: {
+  value: string
+  multiline?: boolean
+  inline?: boolean
+  children?: ReactNode
+}) {
+  return (
+    <span className={`paper-editable${inline ? ' paper-editable-inline' : ''}`}>
+      <span className="paper-editable-mirror" aria-hidden={children ? true : undefined}>
+        {value}
+        {multiline ? '\u200b' : ''}
+      </span>
+      {children}
+    </span>
+  )
+}
 
 /** The mirror preserves paper typography and sizes the native input, including multiline drafts. */
 export default function EditablePaperText({
@@ -82,12 +105,8 @@ export default function EditablePaperText({
   }
 
   return (
-    <span className={`paper-editable${inline ? ' paper-editable-inline' : ''}`}>
-      <span className="paper-editable-mirror" aria-hidden="true">
-        {draft || placeholder}
-        {multiline ? '\u200b' : ''}
-      </span>
+    <PaperText value={draft || placeholder} inline={inline} multiline={multiline}>
       {multiline ? <textarea {...props} rows={1} /> : <input {...props} type="text" />}
-    </span>
+    </PaperText>
   )
 }

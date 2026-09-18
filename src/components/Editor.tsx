@@ -38,7 +38,7 @@ import { analyzeResume, connectionReady } from '../ai'
 import { materialSnapshot, reviewContext, workflowFor } from '../workflow'
 import AgentChat from './AgentChat'
 import type { AIConnection, ProfileField, ResumeDocument, SectionKind, Target, Template } from '../types'
-import ResumePaper from './ResumePaper'
+import PaginatedPreview from './PaginatedPreview'
 import ResumeItemEditor from './ResumeItemEditor'
 import JobDialog from './JobDialog'
 import { Busy, Field, Modal, errorMessage, type Notify } from './ui'
@@ -814,8 +814,8 @@ export default function Editor({
         <div className={`preview-panel ${!showPreview ? 'mobile-hidden-preview' : ''}`}>
           <div className="preview-toolbar">
             <div className="preview-editing-hint">
-              <span>实时预览 · 点击文字编辑</span>
-              <small>离开后保存 · Esc 取消</small>
+              <span>打印效果预览</span>
+              <small>内容与排版实时同步</small>
             </div>
             <label>
               <span className="sr-only">简历模板</span>
@@ -833,10 +833,7 @@ export default function Editor({
             </label>
             <span className="paper-size">A4</span>
           </div>
-          <div className="paper-canvas">
-            <ResumePaper key={document.id} document={document} onEdit={write} />
-          </div>
-          <p className="preview-footnote">导出使用浏览器打印，可选择“保存为 PDF”。长内容会自动分页。</p>
+          <PaginatedPreview key={document.id} document={document} onEdit={write} />
         </div>
       </div>
       <Button

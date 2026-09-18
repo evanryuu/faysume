@@ -2488,6 +2488,176 @@ select {
   margin-top: 6px;
 }
 
+.preview-mode-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 25px;
+}
+.preview-mode-switch {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid #dce4d5;
+  border-radius: 8px;
+  background: #e5eade;
+}
+.preview-mode-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 5px;
+  color: #76836c;
+  font-size: 11px;
+  background: transparent;
+  cursor: pointer;
+}
+.preview-mode-switch button[aria-pressed='true'] {
+  color: #284e43;
+  background: #fff;
+  box-shadow: 0 1px 3px #23362c14;
+}
+.preview-page-count {
+  color: #68785e;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.pagination-hint {
+  margin: 10px 25px 0;
+  color: #7c8972;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.paginated-canvas {
+  position: relative;
+  padding: 16px 20px 26px;
+  flex-shrink: 0;
+}
+.pagination-measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 182mm;
+  height: 269mm;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+  contain: strict;
+}
+.page-flow {
+  width: 182mm;
+  height: 269mm;
+  columns: 1;
+  column-gap: 0;
+  column-fill: auto;
+}
+.preview-page-group {
+  margin-bottom: 22px;
+}
+.preview-page-label {
+  margin: 0 auto 8px;
+  color: #78886c;
+  font-size: 10px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.preview-sheet,
+.editing-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 14mm;
+  margin: 0 auto;
+  background: white;
+  box-shadow:
+    0 2px 12px #23362c14,
+    0 0 0 1px #23362c0a;
+  zoom: var(--preview-scale, 1);
+}
+.preview-sheet {
+  height: 297mm;
+  overflow: hidden;
+}
+.page-content {
+  width: 182mm;
+  height: 269mm;
+  overflow: hidden;
+}
+.paginated-canvas[data-mode='pages'] .paper-editor {
+  display: none;
+}
+.print-layout {
+  .resume-paper {
+    box-shadow: none !important;
+    border: 0 !important;
+    min-height: 0 !important;
+    aspect-ratio: auto !important;
+    width: 100% !important;
+    padding: 0 !important;
+    font-size: 10pt !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .paper-header h1 {
+    font-size: 24pt !important;
+  }
+  .paper-header {
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+  }
+  .paper-headline {
+    font-size: 11pt !important;
+  }
+  .paper-contact {
+    font-size: 9pt !important;
+  }
+  .paper-section h2 {
+    font-size: 11pt !important;
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+  }
+  .paper-item-heading h3 {
+    font-size: 10pt !important;
+  }
+  .paper-organization,
+  .paper-date {
+    font-size: 9pt !important;
+  }
+  .paper-description {
+    font-size: 10pt !important;
+    line-height: 1.65 !important;
+    orphans: 2;
+    widows: 2;
+  }
+  .paper-section {
+    margin-top: 16px;
+    break-inside: auto;
+  }
+  .paper-section h2,
+  .paper-item-heading {
+    break-after: avoid;
+  }
+  .paper-item {
+    margin-bottom: 12px;
+    /* Let long entries use the remaining page space instead of moving as a whole. */
+    break-inside: auto;
+  }
+  .paper-item-heading {
+    break-inside: avoid;
+  }
+  .template-modern .paper-header {
+    margin: 0 0 6mm !important;
+    padding: 7mm !important;
+  }
+  .template-compact .paper-description {
+    font-size: 9pt !important;
+  }
+  .paper-placeholder {
+    display: none;
+  }
+}
+
 @media print {
   .paper-editable {
     outline: none !important;
@@ -2511,8 +2681,12 @@ select {
   .editor-page,
   .editor-layout,
   .preview-panel,
-  .paper-canvas {
+  .paper-canvas,
+  .paper-editor,
+  .editing-sheet {
     display: block !important;
+    zoom: 1 !important;
+    box-shadow: none !important;
     height: auto !important;
     min-height: 0 !important;
     max-height: none !important;
@@ -2529,71 +2703,15 @@ select {
   .edit-panel,
   .preview-toolbar,
   .preview-footnote,
+  .preview-mode-bar,
+  .pagination-hint,
+  .preview-pages,
+  .pagination-measure,
   .mobile-toggle,
   .toast,
   [data-slot='dialog-overlay'],
   [data-slot='dialog-content'] {
     display: none !important;
-  }
-  .resume-paper {
-    box-shadow: none !important;
-    border: 0 !important;
-    min-height: 0 !important;
-    aspect-ratio: auto !important;
-    width: 100% !important;
-    padding: 0 !important;
-    font-size: 10pt !important;
-    print-color-adjust: exact;
-    -webkit-print-color-adjust: exact;
-  }
-  .paper-header h1 {
-    font-size: 24pt !important;
-  }
-  .paper-headline {
-    font-size: 11pt !important;
-  }
-  .paper-contact {
-    font-size: 9pt !important;
-  }
-  .paper-section h2 {
-    font-size: 11pt !important;
-  }
-  .paper-item-heading h3 {
-    font-size: 10pt !important;
-  }
-  .paper-organization,
-  .paper-date {
-    font-size: 9pt !important;
-  }
-  .paper-description {
-    font-size: 10pt !important;
-    line-height: 1.65 !important;
-    orphans: 3;
-    widows: 3;
-  }
-  .paper-section {
-    break-inside: auto;
-  }
-  .paper-section h2,
-  .paper-item-heading {
-    break-after: avoid;
-  }
-  .paper-item {
-    /* Let long entries use the remaining page space instead of moving as a whole. */
-    break-inside: auto;
-  }
-  .paper-item-heading {
-    break-inside: avoid;
-  }
-  .template-modern .paper-header {
-    margin: 0 0 6mm !important;
-    padding: 7mm !important;
-  }
-  .template-compact .paper-description {
-    font-size: 9pt !important;
-  }
-  .paper-placeholder {
-    display: none;
   }
 }
 

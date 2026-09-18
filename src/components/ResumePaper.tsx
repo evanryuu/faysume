@@ -1,5 +1,5 @@
 import type { ItemField, ProfileField, ResumeDocument, Target } from '../types'
-import EditablePaperText from './EditablePaperText'
+import EditablePaperText, { PaperText } from './EditablePaperText'
 
 function safeLink(value: string) {
   try {
@@ -13,9 +13,11 @@ export default function ResumePaper({
   document,
   miniature = false,
   onEdit,
+  previewCopy = false,
 }: {
   document: ResumeDocument
   miniature?: boolean
+  previewCopy?: boolean
   onEdit?: (target: Target, value: string, before: string) => Promise<boolean>
 }) {
   const c = document.content
@@ -37,6 +39,8 @@ export default function ResumePaper({
         placeholder={placeholder}
         onCommit={(next, before) => onEdit!(target, next, before)}
       />
+    ) : previewCopy ? (
+      <PaperText value={value || placeholder} multiline={multiline} inline={inline} />
     ) : (
       value || placeholder
     )
@@ -45,7 +49,7 @@ export default function ResumePaper({
   return (
     <article
       className={`resume-paper template-${document.template} ${miniature ? 'miniature' : ''}`}
-      data-testid={miniature ? undefined : 'resume-paper'}
+      data-testid={miniature || previewCopy ? undefined : 'resume-paper'}
       lang={document.locale}
     >
       <header className="paper-header">
