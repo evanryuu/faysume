@@ -183,11 +183,6 @@ select {
   color: #fff;
   transform: rotate(-5deg);
 }
-.brand-studio {
-  display: block;
-  font-weight: 400;
-  color: #7b8980;
-}
 .workspace-label {
   margin: 51px 16px 15px;
   font-size: 10px;
@@ -277,6 +272,11 @@ select {
 }
 .sidebar-utility:hover {
   color: var(--green);
+}
+.github-link {
+  align-self: flex-start;
+  margin-top: 12px;
+  text-decoration: none;
 }
 .sidebar-version {
   border-top: 1px solid #e0e5da;
@@ -2035,9 +2035,17 @@ select {
   .brand {
     font-size: 17px;
   }
-  .brand-studio {
-    display: inline;
-    margin-left: 3px;
+  .github-link {
+    position: absolute;
+    top: 5px;
+    right: 18px;
+    width: 44px;
+    height: 44px;
+    margin: 0;
+    padding: 0;
+  }
+  .github-link span {
+    display: none;
   }
   .brand-mark {
     height: 28px;

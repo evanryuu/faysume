@@ -1,4 +1,6 @@
-# Resume Studio · 简历工作室
+# Faysume · 简历工作室
+
+Faysume 的名字由 Fay 和 resume 组合而成。
 
 本地优先的 AI 简历工作台：从 PDF、截图或文字开始，提取并校对内容，再通过有依据的建议整理表达和准备岗位版本。
 

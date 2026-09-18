@@ -1,5 +1,47 @@
 import { expect, test } from '@playwright/test'
 
+test('Faysume branding and GitHub link work on desktop and mobile without leaving the workspace', async ({
+  page,
+  context,
+}, testInfo) => {
+  const repositoryUrl = 'https://github.com/evanryuu/faysume'
+  await context.route(repositoryUrl, (route) =>
+    route.fulfill({ contentType: 'text/html', body: '<h1>Faysume repository</h1>' }),
+  )
+  for (const width of [1280, 900, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto('/materials')
+    await expect(page).toHaveTitle('Faysume · 简历工作室')
+    const home = page.getByRole('button', { name: 'Faysume 首页', exact: true })
+    await expect(home).toHaveText('Faysume')
+    await expect(home).toBeVisible()
+    const github = page.getByRole('link', { name: '查看 Faysume 的 GitHub 仓库（新标签页）' })
+    await expect(github).toBeVisible()
+    await expect(github).toHaveAttribute('href', repositoryUrl)
+    await expect(github).toHaveAttribute('target', '_blank')
+    await expect(github).toHaveAttribute('rel', 'noopener noreferrer')
+    const bounds = await github.boundingBox()
+    expect(bounds!.x).toBeGreaterThanOrEqual(0)
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width)
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(900)
+    await github.focus()
+    await expect(github).toBeFocused()
+    const popupPromise = page.waitForEvent('popup')
+    await github.press('Enter')
+    const popup = await popupPromise
+    await expect(popup).toHaveURL(repositoryUrl)
+    await expect(page).toHaveURL(/\/materials$/)
+    await popup.close()
+    await page.screenshot({ path: testInfo.outputPath(`faysume-${width}.png`) })
+    await home.click()
+    await expect(page).toHaveURL(/\/$/)
+  }
+  await page.setViewportSize({ width: 1280, height: 900 })
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: '导出全部备份' }).click()
+  expect((await downloadPromise).suggestedFilename()).toMatch(/^faysume-\d{4}-\d{2}-\d{2}\.json$/)
+})
+
 test('settings controls have enough vertical space for their text on desktop and mobile', async ({
   page,
 }, testInfo) => {
