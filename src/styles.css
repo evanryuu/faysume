@@ -1,4 +1,34 @@
+/* Keep the document/print typography; do not apply Tailwind's global preflight. */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+@import 'tw-animate-css';
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--green);
+  --color-primary-foreground: #fff;
+  --color-secondary: var(--soft);
+  --color-secondary-foreground: var(--green);
+  --color-muted: var(--soft);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--soft);
+  --color-accent-foreground: var(--green);
+  --color-destructive: var(--danger);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: #82a393;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
 :root {
+  --background: #fafbf8;
+  --foreground: #263b34;
+  --radius: 0.625rem;
   font-family:
     'DM Sans',
     -apple-system,
@@ -101,7 +131,6 @@ select {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 7px;
-  padding: 10px 12px;
   color: inherit;
 }
 .sr-only {
@@ -172,6 +201,8 @@ select {
 .sidebar nav button {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
+  white-space: nowrap;
   gap: 12px;
   background: none;
   border: 0;
@@ -599,7 +630,7 @@ select {
 .search input {
   border: 0;
   background: transparent;
-  padding: 10px 0;
+  padding-inline: 0;
   width: 130px;
   font-size: 11px;
   outline: none;
@@ -858,13 +889,15 @@ select {
   font-weight: 500;
   color: #738168;
 }
+.field [data-slot='native-select-wrapper'] {
+  width: 100%;
+}
 .field input,
 .field textarea,
 .field select,
 .questions textarea {
   border: 1px solid #e0e6dc;
   border-radius: 6px;
-  padding: 10px 11px;
   color: #354831;
   background: #fff;
   width: 100%;
@@ -892,8 +925,7 @@ select {
   margin: 15px 0;
   cursor: pointer;
 }
-.check-row input {
-  accent-color: var(--green);
+.check-row [data-slot='checkbox'] {
   margin: 4px 0 0;
   flex-shrink: 0;
 }
@@ -941,23 +973,21 @@ select {
   color: #969f8b;
   margin: 10px 0;
 }
-.modal-backdrop {
+[data-slot='dialog-overlay'] {
   position: fixed;
   inset: 0;
   background: #172b2252;
   backdrop-filter: blur(4px);
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
+  z-index: 50;
 }
 .modal {
   background: #fafbf8;
   border: 1px solid #e9efe2;
   border-radius: 14px;
   width: 480px;
-  max-width: 100%;
+  max-width: calc(100vw - 24px);
+  display: block;
+  padding: 0;
   max-height: 90vh;
   overflow: auto;
   box-shadow: 0 24px 80px #14251e30;
@@ -1386,7 +1416,7 @@ select {
 .editor-section .field input,
 .editor-section .field textarea {
   font-size: 11px;
-  padding: 9px;
+  padding-inline: 9px;
 }
 .section-tools {
   display: flex;
@@ -1465,7 +1495,6 @@ select {
 }
 .preview-toolbar select {
   font-size: 10px;
-  padding: 7px 10px;
   border: 1px solid #dce5d1;
   background: #f7faf2;
   border-radius: 5px;
@@ -2185,9 +2214,6 @@ select {
     gap: 15px;
     flex-wrap: wrap;
   }
-  .modal-backdrop {
-    padding: 12px;
-  }
   .modal {
     max-height: 92dvh;
     border-radius: 10px;
@@ -2333,6 +2359,58 @@ select {
     margin-left: 4px;
   }
 }
+.agent-chat {
+  margin: 24px 0;
+  padding: 20px;
+  border: 1px solid #d6e1da;
+  border-radius: 16px;
+  background: #f7faf7;
+}
+.agent-chat h3,
+.agent-proposal h4 {
+  margin: 0 0 12px;
+}
+.agent-messages {
+  max-height: 600px;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+.agent-message {
+  margin: 16px 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: white;
+}
+.agent-message.user {
+  background: #e9f0eb;
+}
+.agent-text {
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+.agent-proposal {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #d6e1da;
+}
+.agent-proposal li {
+  margin: 8px 0;
+  line-height: 1.6;
+}
+.agent-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.research-source {
+  padding: 12px 0;
+  overflow-wrap: anywhere;
+}
+.research-source small {
+  display: block;
+  margin-top: 6px;
+}
+
 @media print {
   @page {
     size: A4 portrait;
@@ -2366,7 +2444,8 @@ select {
   .preview-footnote,
   .mobile-toggle,
   .toast,
-  .modal-backdrop {
+  [data-slot='dialog-overlay'],
+  [data-slot='dialog-content'] {
     display: none !important;
   }
   .resume-paper {

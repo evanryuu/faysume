@@ -6,3 +6,6 @@ dist/
 test-results/
 playwright-report/
 .superdesign/tmp/
+.wrangler/
+.dev.vars*
+!.dev.vars.example

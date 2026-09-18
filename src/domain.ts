@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { reviewContext, workflowSchema } from './workflow'
 import type { ResumeContent, ResumeDocument, ResumeItem, ResumeSection, SectionKind, Target } from './types'
 
 export const uid = (): string => crypto.randomUUID()
@@ -49,7 +50,7 @@ export const targetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('section'), sectionId: id, field: z.literal('title') }).strict(),
 ])
 const changeSchema = z.object({ target: targetSchema, before: text, after: text }).strict()
-const suggestionSchema = z
+export const suggestionSchema = z
   .object({
     id,
     target: targetSchema,
@@ -61,6 +62,9 @@ const suggestionSchema = z
     requiresConfirmation: z.boolean(),
     confirmed: z.boolean(),
     status: z.enum(['pending', 'applied', 'dismissed']),
+    references: z.array(z.string().max(100)).max(15).optional(),
+    reviewContext: z.string().max(100000).optional(),
+    materialSnapshot: z.string().max(2_000_000).optional(),
   })
   .strict()
 const historySchema = z
@@ -93,6 +97,28 @@ export const documentSchema = z
     extractionReviewed: z.boolean(),
     createdAt: timestamp,
     updatedAt: timestamp,
+    workflow: workflowSchema.optional(),
+    conversation: z
+      .object({
+        messages: z
+          .array(
+            z.custom<import('./chat').ResumeChatMessage>((value) => {
+              if (!value || typeof value !== 'object') return false
+              const m = value as Record<string, unknown>
+              return (
+                typeof m.id === 'string' &&
+                ['user', 'assistant'].includes(String(m.role)) &&
+                Array.isArray(m.parts) &&
+                JSON.stringify(m).length <= 2_000_000
+              )
+            }),
+          )
+          .max(100),
+        snapshot: z.string().max(3_000_000),
+        handledCalls: z.array(z.string().max(200)).max(100),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
   .superRefine((doc, ctx) => {
@@ -217,6 +243,8 @@ export function cloneResume(doc: ResumeDocument, name = `${doc.name} · 副本`)
   const now = new Date().toISOString()
   return {
     ...copy,
+    workflow: undefined,
+    conversation: undefined,
     id: uid(),
     name,
     revision: 0,
@@ -284,6 +312,8 @@ export function applySuggestions(doc: ResumeDocument, ids: string[]): ResumeDocu
   const selected = ids.map((id) => {
     const suggestion = doc.suggestions.find((s) => s.id === id)
     if (!suggestion || suggestion.status !== 'pending') throw new Error('建议不存在或已处理')
+    if (suggestion.reviewContext && suggestion.reviewContext !== reviewContext(doc))
+      throw new Error('修改目标已变化，请重新确认方向并分析。')
     if (suggestion.requiresConfirmation && !suggestion.confirmed) throw new Error('请先确认建议中的新事实')
     if (readTarget(doc.content, suggestion.target) !== suggestion.before)
       throw new Error('字段已被修改，请重新分析后再应用建议')

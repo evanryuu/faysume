@@ -8,8 +8,9 @@ test('create, edit, persist, duplicate and change template without losing conten
   await page.getByLabel('职业标题', { exact: true }).fill('前端工程师')
   await page.getByLabel('职业标题', { exact: true }).blur()
   await expect(page.getByTestId('resume-paper')).toContainText('测试用户')
+  const resumeUrl = page.url()
   await page.reload()
-  await page.getByRole('button', { name: '打开 未命名简历' }).click()
+  await expect(page).toHaveURL(resumeUrl)
   await expect(page.getByLabel('姓名', { exact: true })).toHaveValue('测试用户')
   await page.getByLabel('简历模板').selectOption('modern')
   await expect(page.getByTestId('resume-paper')).toContainText('测试用户')
@@ -85,6 +86,7 @@ test('screenshot extraction, fact review, suggestion apply and undo, JD copy, no
   })
   await page.goto('/')
   await page.getByRole('button', { name: 'AI 设置' }).click()
+  await page.getByLabel('连接方式').selectOption('direct')
   await page.getByLabel('Base URL', { exact: true }).fill('https://provider.test/v1')
   await page.getByLabel('API Key', { exact: true }).fill('secret-test-key')
   await page.getByLabel('模型名称').fill('test-vision')
@@ -92,7 +94,7 @@ test('screenshot extraction, fact review, suggestion apply and undo, JD copy, no
   await page.getByRole('button', { name: '测试连接', exact: true }).click()
   await expect(page.getByText('文本连接成功', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: /我的简历/ }).click()
-  await page.getByRole('button', { name: '上传简历截图', exact: true }).click()
+  await page.getByRole('button', { name: '上传简历 PDF / 截图', exact: true }).click()
   const screenshot = {
     name: 'resume.png',
     mimeType: 'image/png',
@@ -163,8 +165,10 @@ test('material upload, backup restore, responsive layout and print output', asyn
   await page.getByRole('button', { name: '返回简历列表' }).click()
   await expect(page.getByRole('button', { name: '打开 虚构示例 · 林知夏', exact: true })).toHaveCount(2)
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.screenshot({ path: testInfo.outputPath('mobile.png'), fullPage: true })
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
+    .toBe(true)
+  await page.screenshot({ path: testInfo.outputPath('mobile.png'), fullPage: true, animations: 'disabled' })
 })
 
 test('focused fields do not silently overwrite another tab', async ({ page, context }) => {
@@ -188,6 +192,5 @@ test('focused fields do not silently overwrite another tab', async ({ page, cont
   await local.blur()
   await expect(page.getByRole('alert')).toContainText('此字段已在其他操作中更新')
   await page.reload()
-  await page.getByRole('button', { name: '打开 虚构示例 · 林知夏', exact: true }).click()
   await expect(page.getByLabel('姓名', { exact: true })).toHaveValue('另一标签页再次更新')
 })

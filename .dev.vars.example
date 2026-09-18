@@ -1,0 +1,9 @@
+# Copy to .dev.vars for local development. Never commit real credentials.
+AI_BASE_URL=https://api.deepseek.com/v1
+AI_MODEL=deepseek-chat
+AI_API_KEY=
+AI_VISION=false
+AI_JSON_MODE=false
+APP_ACCESS_TOKEN=
+TOOL_APPROVAL_SECRET=
+TAVILY_API_KEY=

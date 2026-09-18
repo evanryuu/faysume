@@ -1,6 +1,7 @@
 import Dexie, { type EntityTable } from 'dexie'
 import { z } from 'zod'
 import { documentSchema, uid } from './domain'
+import { reviewContext } from './workflow'
 import type { Material, ResumeDocument, Source } from './types'
 
 export function createDatabase(name = 'resume-studio') {
@@ -72,6 +73,15 @@ export async function mutateResume(
     const current = await db.resumes.get(id)
     if (!current) throw new Error('简历不存在，可能已在其他页面删除')
     const next = mutator(structuredClone(current))
+    if (
+      next.workflow &&
+      next.workflow.inputSnapshot === current.workflow?.inputSnapshot &&
+      (reviewContext(current) !== reviewContext(next) ||
+        JSON.stringify(current.content) !== JSON.stringify(next.content) ||
+        current.extractionReviewed !== next.extractionReviewed)
+    ) {
+      next.workflow.confirmed = false
+    }
     if (next.id !== id) throw new Error('不能修改简历 ID')
     const parsed = documentSchema.parse({
       ...next,
@@ -149,6 +159,10 @@ export async function importBackup(json: string): Promise<void> {
   const sourceIds = new Map(backup.sources.map((s) => [s.id, uid()]))
   const resumes = backup.resumes.map((d) => ({
     ...d,
+    workflow: d.workflow
+      ? { ...d.workflow, materialIds: [], plan: null, confirmed: false, inputSnapshot: '', research: [] }
+      : undefined,
+    conversation: undefined,
     id: resumeIds.get(d.id)!,
     revision: 0,
     sourceIds: d.sourceIds.map((id) => sourceIds.get(id)!),

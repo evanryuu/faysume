@@ -1,5 +1,9 @@
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { X, LoaderCircle, ArrowUp, ArrowDown, ImagePlus, Trash2 } from 'lucide-react'
+import { Dialog, DialogClose, DialogContent, DialogTitle } from './ui/dialog'
 export type Notify = (message: string, kind?: 'error' | 'success') => void
 export const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : '操作失败，请重试。'
@@ -15,63 +19,35 @@ export function Modal({
   children: ReactNode
   wide?: boolean
 }) {
-  const ref = useRef<HTMLDivElement>(null)
-  const closeRef = useRef(onClose)
-  closeRef.current = onClose
-  useEffect(() => {
-    const previous = document.activeElement as HTMLElement | null
-    const modal = ref.current!
-    modal.focus()
-    const handle = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeRef.current()
-      if (event.key !== 'Tab') return
-      const nodes = [
-        ...modal.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href]',
-        ),
-      ].filter((node) => node.offsetParent !== null)
-      if (!nodes.length) {
-        event.preventDefault()
-        return
-      }
-      const first = nodes[0],
-        last = nodes[nodes.length - 1]
-      if (event.shiftKey && (document.activeElement === first || document.activeElement === modal)) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === modal)) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-    modal.addEventListener('keydown', handle)
-    const old = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      modal.removeEventListener('keydown', handle)
-      document.body.style.overflow = old
-      previous?.focus()
-    }
-  }, [])
+  const [returnFocus] = useState(() => document.activeElement as HTMLElement | null)
   return (
-    <div className="modal-backdrop">
-      <div
-        ref={ref}
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose()
+      }}
+    >
+      <DialogContent
         className={`modal ${wide ? 'wide' : ''}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        tabIndex={-1}
+        showCloseButton={false}
+        aria-describedby={undefined}
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          if (returnFocus?.isConnected) returnFocus.focus()
+        }}
       >
         <div className="modal-heading">
-          <h2>{title}</h2>
-          <button className="icon-button" aria-label="关闭对话框" onClick={onClose}>
-            <X size={20} />
-          </button>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogClose asChild>
+            <Button variant="ghost" size="icon" type="button" className="icon-button" aria-label="关闭对话框">
+              <X size={20} />
+            </Button>
+          </DialogClose>
         </div>
         {children}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -121,7 +97,7 @@ export function Field({
   return (
     <label className={`field ${multiline ? 'full' : ''}`}>
       <span>{label}</span>
-      {multiline ? <textarea {...props} rows={5} /> : <input {...props} type={type} />}
+      {multiline ? <Textarea {...props} rows={5} /> : <Input {...props} type={type} />}
     </label>
   )
 }
@@ -131,9 +107,9 @@ export function Busy({ label, onCancel }: { label: string; onCancel: () => void 
     <div className="busy">
       <LoaderCircle size={19} className="spin" />
       <span>{label}</span>
-      <button className="text-button" onClick={onCancel}>
+      <Button variant="ghost" size="layout" type="button" className="text-button" onClick={onCancel}>
         取消
-      </button>
+      </Button>
     </div>
   )
 }
@@ -219,7 +195,10 @@ export function ImagePicker({
         }
       }}
     >
-      <button
+      <Button
+        variant="ghost"
+        size="layout"
+        type="button"
         className="dropzone"
         disabled={disabled}
         onClick={() => input.current?.click()}
@@ -234,8 +213,8 @@ export function ImagePicker({
         </span>
         <strong>选择、拖入或粘贴截图</strong>
         <span>PNG / JPG / WebP · 最多 5 张，每张 10MB</span>
-      </button>
-      <input
+      </Button>
+      <Input
         ref={input}
         className="sr-only"
         aria-label="上传截图文件"
@@ -257,30 +236,39 @@ export function ImagePicker({
                 {index + 1}. {image.name}
               </span>
               <div>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  type="button"
                   className="icon-button"
                   aria-label={`上移第 ${index + 1} 页`}
                   disabled={disabled || index === 0}
                   onClick={() => move(index, -1)}
                 >
                   <ArrowUp size={14} />
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  type="button"
                   className="icon-button"
                   aria-label={`下移第 ${index + 1} 页`}
                   disabled={disabled || index === images.length - 1}
                   onClick={() => move(index, 1)}
                 >
                   <ArrowDown size={14} />
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  type="button"
                   className="icon-button"
                   aria-label={`移除第 ${index + 1} 页`}
                   disabled={disabled}
                   onClick={() => commit(imagesRef.current.filter((i) => i.id !== image.id))}
                 >
                   <Trash2 size={14} />
-                </button>
+                </Button>
               </div>
             </div>
           ))}

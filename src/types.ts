@@ -41,6 +41,9 @@ export interface Suggestion {
   requiresConfirmation: boolean
   confirmed: boolean
   status: 'pending' | 'applied' | 'dismissed'
+  references?: string[]
+  reviewContext?: string
+  materialSnapshot?: string
 }
 export interface Change {
   target: Target
@@ -75,6 +78,8 @@ export interface ResumeDocument {
   extractionReviewed: boolean
   createdAt: string
   updatedAt: string
+  workflow?: import('./workflow').Workflow
+  conversation?: { messages: import('./chat').ResumeChatMessage[]; snapshot: string; handledCalls: string[] }
 }
 export interface Material {
   id: string
@@ -90,6 +95,7 @@ export interface Source {
   dataUrl: string
 }
 export interface AISettings {
+  mode?: 'server' | 'direct'
   baseUrl: string
   model: string
   vision: boolean
@@ -97,6 +103,7 @@ export interface AISettings {
 }
 export interface AIConnection extends AISettings {
   apiKey: string
+  accessToken?: string
 }
 export interface Extraction {
   content: ResumeContent

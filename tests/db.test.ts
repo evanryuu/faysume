@@ -12,6 +12,7 @@ import {
   saveResume,
 } from '../src/db'
 import type { Source } from '../src/types'
+import { emptyWorkflow, workflowSnapshot } from '../src/workflow'
 
 beforeEach(async () => {
   await db.open()
@@ -25,6 +26,33 @@ function source(resumeId: string): Source {
 }
 
 describe('local repository', () => {
+  it('persists conversation and approval state; backup restores a draft without old approvals', async () => {
+    const doc = createResume('对话测试')
+    doc.workflow = {
+      ...emptyWorkflow(),
+      intent: '强调前端贡献',
+      confirmed: true,
+      plan: { summary: '精简表达', directions: ['强调贡献'], questions: [], searchQueries: [] },
+    }
+    doc.workflow.inputSnapshot = workflowSnapshot(doc, [])
+    doc.conversation = {
+      messages: [{ id: 'u1', role: 'user', parts: [{ type: 'text', text: '强调前端贡献' }] }],
+      snapshot: workflowSnapshot(doc, []),
+      handledCalls: [],
+    }
+    await insertResume(doc)
+    db.close()
+    await db.open()
+    expect((await db.resumes.get(doc.id))?.conversation?.messages).toHaveLength(1)
+    await mutateResume(doc.id, (d) => ({ ...d, template: 'modern' }))
+    expect((await db.resumes.get(doc.id))?.workflow?.confirmed).toBe(true)
+    await importBackup(await exportBackup())
+    const restored = (await db.resumes.toArray()).find((d) => d.id !== doc.id)!
+    expect(restored.workflow).toMatchObject({ intent: '强调前端贡献', plan: null, confirmed: false })
+    expect(restored.conversation).toBeUndefined()
+    await mutateResume(doc.id, (d) => ({ ...d, targetRole: '不同岗位' }))
+    expect((await db.resumes.get(doc.id))?.workflow?.confirmed).toBe(false)
+  })
   it('persists documents and history after closing and reopening the database', async () => {
     const doc = createResume('保存测试')
     doc.suggestions = [

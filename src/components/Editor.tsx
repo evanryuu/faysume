@@ -1,3 +1,7 @@
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { NativeSelectOption, NativeSelect } from '@/components/ui/native-select'
+import { Textarea } from '@/components/ui/textarea'
 import { useEffect, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
@@ -30,7 +34,9 @@ import {
   uid,
   writeTarget,
 } from '../domain'
-import { analyzeResume } from '../ai'
+import { analyzeResume, connectionReady } from '../ai'
+import { materialSnapshot, reviewContext, workflowFor } from '../workflow'
+import AgentChat from './AgentChat'
 import type {
   AIConnection,
   ItemField,
@@ -44,10 +50,14 @@ import ResumePaper from './ResumePaper'
 import JobDialog from './JobDialog'
 import { Busy, Field, Modal, errorMessage, type Notify } from './ui'
 
-type Tab = 'content' | 'ai' | 'sources' | 'history'
+import type { EditorTab } from '../navigation'
 export default function Editor({
   document,
   connection,
+  tab,
+  onTabChange: setTab,
+  showPreview,
+  onPreviewChange: setShowPreview,
   onBack,
   onOpen,
   onSettings,
@@ -55,20 +65,27 @@ export default function Editor({
 }: {
   document: ResumeDocument
   connection: AIConnection
+  tab: EditorTab
+  onTabChange: (tab: EditorTab) => void
+  showPreview: boolean
+  onPreviewChange: (show: boolean) => void
   onBack: () => void
   onOpen: (id: string) => void
   onSettings: () => void
   notify: Notify
 }) {
-  const [tab, setTab] = useState<Tab>('content'),
-    [jobOpen, setJobOpen] = useState(false),
+  const [jobOpen, setJobOpen] = useState(false),
     [busy, setBusy] = useState(false),
-    [selectedMaterials, setSelectedMaterials] = useState<string[]>([]),
     [adding, setAdding] = useState<SectionKind>('work'),
     [deleting, setDeleting] = useState<{ sectionId: string; itemId?: string } | null>(null),
-    [answer, setAnswer] = useState(''),
-    [showPreview, setShowPreview] = useState(false)
+    [answer, setAnswer] = useState('')
   const materials = useLiveQuery(() => db.materials.orderBy('updatedAt').reverse().toArray(), [], [])
+  const selectedMaterials = workflowFor(document).materialIds
+  const setSelectedMaterials = (ids: string[]) =>
+    void change((doc) => ({
+      ...doc,
+      workflow: { ...workflowFor(doc), materialIds: ids, confirmed: false },
+    }))
   const sources = useLiveQuery(
     () => db.sources.bulkGet(document.sourceIds),
     [document.id, document.sourceIds.join(',')],
@@ -112,7 +129,7 @@ export default function Editor({
     }
   }
   const analyze = async () => {
-    if (!connection.apiKey || !connection.baseUrl || !connection.model) {
+    if (!connectionReady(connection)) {
       notify('请先配置 AI 连接。', 'error')
       onSettings()
       return
@@ -126,7 +143,7 @@ export default function Editor({
       if (!snapshot.extractionReviewed) throw new Error('请先在「识别原稿」中确认已校对内容。')
       const result = await analyzeResume(
         connection,
-        snapshot,
+        { ...snapshot, workflow: undefined },
         materials.filter((m) => selectedMaterials.includes(m.id)),
         signal,
       )
@@ -161,7 +178,21 @@ export default function Editor({
   const pending = document.suggestions.filter((s) => s.status === 'pending')
   const apply = async (ids: string[]) => {
     try {
-      await mutateResume(document.id, (doc) => applySuggestions(doc, ids))
+      await db.transaction('rw', db.resumes, db.materials, db.sources, async () => {
+        const latest = await db.resumes.get(document.id)
+        if (!latest) throw new Error('简历不存在。')
+        const chosen = (await db.materials.bulkGet(workflowFor(latest).materialIds)).filter(
+          (m): m is NonNullable<typeof m> => Boolean(m),
+        )
+        if (
+          latest.suggestions.some(
+            (s) =>
+              ids.includes(s.id) && s.materialSnapshot && s.materialSnapshot !== materialSnapshot(chosen),
+          )
+        )
+          throw new Error('参考素材已变化，请重新分析后采纳。')
+        await mutateResume(document.id, (doc) => applySuggestions(doc, ids))
+      })
       notify('建议已应用，可以在修改记录中撤回。')
     } catch (e) {
       notify(errorMessage(e), 'error')
@@ -226,9 +257,16 @@ export default function Editor({
     <div className="editor-page">
       <div className="editor-toolbar">
         <div className="editor-title">
-          <button className="icon-button" aria-label="返回简历列表" onClick={onBack}>
+          <Button
+            variant="ghost"
+            size="icon"
+            type="button"
+            className="icon-button"
+            aria-label="返回简历列表"
+            onClick={onBack}
+          >
             <ArrowLeft size={20} />
-          </button>
+          </Button>
           <div>
             <Field
               label="简历名称"
@@ -242,27 +280,51 @@ export default function Editor({
           </div>
         </div>
         <div className="toolbar-actions">
-          <button className="button secondary" onClick={() => void copy()}>
+          <Button
+            variant="outline"
+            size="default"
+            type="button"
+            className="button secondary"
+            onClick={() => void copy()}
+          >
             <Copy size={15} />
             <span>另存副本</span>
-          </button>
-          <button className="button secondary" onClick={() => setJobOpen(true)}>
+          </Button>
+          <Button
+            variant="outline"
+            size="default"
+            type="button"
+            className="button secondary"
+            onClick={() => setJobOpen(true)}
+          >
             <BriefcaseBusiness size={15} />
             <span>针对岗位定制</span>
-          </button>
-          <button className="button primary" onClick={() => void print()}>
+          </Button>
+          <Button
+            variant="default"
+            size="default"
+            type="button"
+            className="button primary"
+            onClick={() => void print()}
+          >
             <Download size={16} />
             <span>导出 PDF</span>
-          </button>
+          </Button>
         </div>
       </div>
       {!document.extractionReviewed && (
         <div className="review-banner">
           <ScanText size={18} />
           <span>这是 AI 提取的原始内容。请先核对姓名、日期和数字，再开始优化。</span>
-          <button className="text-button" onClick={() => setTab('sources')}>
+          <Button
+            variant="ghost"
+            size="layout"
+            type="button"
+            className="text-button"
+            onClick={() => setTab('sources')}
+          >
             查看原稿并校对 →
-          </button>
+          </Button>
         </div>
       )}
       <div className="editor-layout">
@@ -276,11 +338,18 @@ export default function Editor({
                 ['history', '修改记录', History],
               ] as const
             ).map(([id, label, Icon]) => (
-              <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}>
+              <Button
+                variant="ghost"
+                size="layout"
+                type="button"
+                key={id}
+                className={tab === id ? 'active' : ''}
+                onClick={() => setTab(id)}
+              >
                 <Icon size={15} />
                 {label}
                 {id === 'ai' && pending.length > 0 && <b>{pending.length}</b>}
-              </button>
+              </Button>
             ))}
           </div>
           <div className="editor-scroll">
@@ -323,7 +392,10 @@ export default function Editor({
                         }
                       />
                       <div>
-                        <button
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          type="button"
                           className="icon-button"
                           title="上移区块"
                           aria-label={`上移 ${section.title}`}
@@ -331,8 +403,11 @@ export default function Editor({
                           onClick={() => move(section.id, null, -1)}
                         >
                           <ArrowUp size={15} />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          type="button"
                           className="icon-button"
                           title="下移区块"
                           aria-label={`下移 ${section.title}`}
@@ -340,14 +415,17 @@ export default function Editor({
                           onClick={() => move(section.id, null, 1)}
                         >
                           <ArrowDown size={15} />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          type="button"
                           className="icon-button"
                           aria-label={`删除区块 ${section.title}`}
                           onClick={() => setDeleting({ sectionId: section.id })}
                         >
                           <Trash2 size={15} />
-                        </button>
+                        </Button>
                       </div>
                     </div>
                     {section.items.map((item, i) => (
@@ -357,29 +435,38 @@ export default function Editor({
                             {String(i + 1).padStart(2, '0')} / {item.title || '新的经历'}
                           </span>
                           <div>
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              type="button"
                               className="icon-button"
                               aria-label={`上移经历 ${i + 1}`}
                               disabled={i === 0}
                               onClick={() => move(section.id, item.id, -1)}
                             >
                               <ArrowUp size={14} />
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              type="button"
                               className="icon-button"
                               aria-label={`下移经历 ${i + 1}`}
                               disabled={i === section.items.length - 1}
                               onClick={() => move(section.id, item.id, 1)}
                             >
                               <ArrowDown size={14} />
-                            </button>
-                            <button
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              type="button"
                               className="icon-button"
                               aria-label={`删除经历 ${i + 1}`}
                               onClick={() => setDeleting({ sectionId: section.id, itemId: item.id })}
                             >
                               <Trash2 size={14} />
-                            </button>
+                            </Button>
                           </div>
                         </div>
                         <div className="field-grid">
@@ -418,7 +505,10 @@ export default function Editor({
                         </div>
                       </div>
                     ))}
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="default"
+                      type="button"
                       className="button subtle full-width"
                       onClick={() =>
                         void change((doc) => {
@@ -429,22 +519,25 @@ export default function Editor({
                     >
                       <Plus size={15} />
                       添加一条经历
-                    </button>
+                    </Button>
                   </div>
                 ))}
                 <div className="add-section">
-                  <select
+                  <NativeSelect
                     aria-label="新增区块类型"
                     value={adding}
                     onChange={(e) => setAdding(e.target.value as SectionKind)}
                   >
-                    <option value="work">工作经历</option>
-                    <option value="project">项目经历</option>
-                    <option value="education">教育背景</option>
-                    <option value="skills">技能</option>
-                    <option value="other">其他经历</option>
-                  </select>
-                  <button
+                    <NativeSelectOption value="work">工作经历</NativeSelectOption>
+                    <NativeSelectOption value="project">项目经历</NativeSelectOption>
+                    <NativeSelectOption value="education">教育背景</NativeSelectOption>
+                    <NativeSelectOption value="skills">技能</NativeSelectOption>
+                    <NativeSelectOption value="other">其他经历</NativeSelectOption>
+                  </NativeSelect>
+                  <Button
+                    variant="outline"
+                    size="default"
+                    type="button"
                     className="button secondary"
                     onClick={() =>
                       void change((doc) => {
@@ -457,7 +550,7 @@ export default function Editor({
                   >
                     <Plus size={16} />
                     添加区块
-                  </button>
+                  </Button>
                 </div>
               </>
             )}
@@ -484,17 +577,17 @@ export default function Editor({
                   />
                   <label className="field">
                     <span>目标简历语言</span>
-                    <select
+                    <NativeSelect
                       value={document.locale}
                       onChange={(e) => {
                         const locale = e.currentTarget.value
                         void change((doc) => ({ ...doc, locale }))
                       }}
                     >
-                      <option value="zh-CN">简体中文</option>
-                      <option value="en">English</option>
-                      <option value="ja">日本語</option>
-                    </select>
+                      <NativeSelectOption value="zh-CN">简体中文</NativeSelectOption>
+                      <NativeSelectOption value="en">English</NativeSelectOption>
+                      <NativeSelectOption value="ja">日本語</NativeSelectOption>
+                    </NativeSelect>
                   </label>
                 </div>
                 <Field
@@ -511,12 +604,11 @@ export default function Editor({
                     </summary>
                     {materials.map((material) => (
                       <label className="check-row" key={material.id}>
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={selectedMaterials.includes(material.id)}
-                          onChange={(e) =>
+                          onCheckedChange={(checked) =>
                             setSelectedMaterials(
-                              e.target.checked
+                              checked === true
                                 ? [...selectedMaterials, material.id]
                                 : selectedMaterials.filter((id) => id !== material.id),
                             )
@@ -525,33 +617,66 @@ export default function Editor({
                         <span>{material.title}</span>
                       </label>
                     ))}
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="layout"
+                      type="button"
                       className="text-button"
                       disabled={!selectedMaterials.length}
                       onClick={addMaterials}
                     >
                       将选中素材原文加入简历
-                    </button>
+                    </Button>
                   </details>
                 )}
                 <p className="hint">
                   分析会发送当前简历、岗位描述及选中的素材到配置的 AI 服务。市场与语言建议供参考，请核对事实。
                 </p>
-                {busy ? (
+                {connection.mode === 'server' ? (
+                  <AgentChat
+                    document={document}
+                    materials={materials.filter((m) => selectedMaterials.includes(m.id))}
+                    connection={connection}
+                    notify={notify}
+                  />
+                ) : busy ? (
                   <Busy label="正在分析你的经历…" onCancel={() => controller.current?.abort()} />
                 ) : (
-                  <button
+                  <Button
+                    variant="default"
+                    size="default"
+                    type="button"
                     className="button primary full-width"
                     disabled={!document.extractionReviewed}
                     onClick={() => void analyze()}
                   >
                     <Sparkles size={17} />
                     {document.analysisSummary ? '重新分析简历' : '开始 AI 分析'}
-                  </button>
+                  </Button>
                 )}
                 {!document.extractionReviewed && <p className="hint">请先到「识别原稿」确认校对。</p>}
                 {document.analysisSummary && (
                   <div className="analysis-summary">{document.analysisSummary}</div>
+                )}
+                {document.workflow?.research && document.workflow.research.length > 0 && (
+                  <details className="material-select">
+                    <summary>本轮参考的外部资料（{document.workflow.research.length}）</summary>
+                    <p className="hint">
+                      外部资料用于写法和岗位参考，不是个人经历的证据。未标明发布日期的资料不能证明是最新发布。
+                    </p>
+                    {document.workflow.research.map((source) => (
+                      <article key={source.id} className="research-source">
+                        <a href={source.url} target="_blank" rel="noreferrer">
+                          {source.title}
+                        </a>
+                        <small>
+                          发布日期：{source.publishedAt || '未提供'} · 检索日期：
+                          {source.retrievedAt.slice(0, 10)}
+                        </small>
+                        <p>{source.content}</p>
+                      </article>
+                    ))}
+                  </details>
                 )}
                 {document.analysisQuestions.length > 0 && (
                   <div className="questions">
@@ -561,32 +686,38 @@ export default function Editor({
                         <li key={i}>{q}</li>
                       ))}
                     </ol>
-                    <textarea
+                    <Textarea
                       aria-label="补充亮点回答"
                       value={answer}
                       onChange={(e) => setAnswer(e.target.value)}
                       rows={4}
                       placeholder="写下真实经历或数据依据…"
                     />
-                    <button
+                    <Button
+                      variant="outline"
+                      size="default"
+                      type="button"
                       className="button secondary"
                       disabled={!answer.trim()}
                       onClick={() => void saveAnswer()}
                     >
                       保存为经历素材
-                    </button>
+                    </Button>
                   </div>
                 )}
                 {pending.length > 0 && (
                   <div className="suggestion-heading">
                     <h3>{pending.length} 条待审阅建议</h3>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="layout"
+                      type="button"
                       className="text-button"
                       disabled={!pending.some((s) => s.confirmed)}
                       onClick={() => void apply(pending.filter((s) => s.confirmed).map((s) => s.id))}
                     >
                       应用所有已确认建议
-                    </button>
+                    </Button>
                   </div>
                 )}
                 {pending.map((suggestion) => (
@@ -602,14 +733,25 @@ export default function Editor({
                       <p>{suggestion.after}</p>
                     </div>
                     <p className="hint">参考来源：{suggestion.evidence.join('、')}</p>
+                    {suggestion.reviewContext === reviewContext(document) &&
+                      suggestion.references?.map((id) => {
+                        const source = document.workflow?.research.find((s) => s.id === id)
+                        return source ? (
+                          <p className="hint" key={id}>
+                            外部参考：
+                            <a href={source.url} target="_blank" rel="noreferrer">
+                              {source.title}
+                            </a>
+                          </p>
+                        ) : null
+                      })}
                     {suggestion.question && <div className="notice warning">{suggestion.question}</div>}
                     <label className="check-row">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         key={`${suggestion.id}-${suggestion.confirmed}`}
                         defaultChecked={suggestion.confirmed}
-                        onChange={(e) => {
-                          const confirmed = e.currentTarget.checked
+                        onCheckedChange={(checked) => {
+                          const confirmed = checked === true
                           void change((doc) => ({
                             ...doc,
                             suggestions: doc.suggestions.map((s) =>
@@ -621,7 +763,10 @@ export default function Editor({
                       <span>我已核对，修改后的事实准确</span>
                     </label>
                     <div className="suggestion-actions">
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="layout"
+                        type="button"
                         className="text-button muted"
                         onClick={() =>
                           void change((doc) => ({
@@ -633,15 +778,18 @@ export default function Editor({
                         }
                       >
                         忽略
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        type="button"
                         className="button primary small"
                         disabled={!suggestion.confirmed}
                         onClick={() => void apply([suggestion.id])}
                       >
                         <Check size={15} />
                         采纳修改
-                      </button>
+                      </Button>
                     </div>
                   </article>
                 ))}
@@ -675,13 +823,16 @@ export default function Editor({
                 ))}
                 {!sources.length && <p className="muted">这份简历没有关联截图，可直接在内容页校对。</p>}
                 {!document.extractionReviewed ? (
-                  <button
+                  <Button
+                    variant="default"
+                    size="default"
+                    type="button"
                     className="button primary full-width"
                     onClick={() => void change((doc) => ({ ...doc, extractionReviewed: true }))}
                   >
                     <Check size={17} />
                     我已校对，开始编辑与优化
-                  </button>
+                  </Button>
                 ) : (
                   <div className="status">
                     <Check size={16} />
@@ -702,14 +853,17 @@ export default function Editor({
                       <strong>{entry.label}</strong>
                       <small>{new Date(entry.createdAt).toLocaleString('zh-CN')}</small>
                     </div>
-                    <button
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
                       className="button secondary small"
                       disabled={entry.reverted}
                       onClick={() => void change((doc) => revertHistory(doc, entry.id))}
                     >
                       <Undo2 size={14} />
                       {entry.reverted ? '已撤回' : '撤回'}
-                    </button>
+                    </Button>
                     <ul>
                       {entry.changes.map((c, i) => (
                         <li key={i}>{targetLabel(document.content, c.target)}</li>
@@ -732,17 +886,17 @@ export default function Editor({
             <span>实时预览</span>
             <label>
               <span className="sr-only">简历模板</span>
-              <select
+              <NativeSelect
                 value={document.template}
                 onChange={(e) => {
                   const template = e.currentTarget.value as Template
                   void change((doc) => ({ ...doc, template }))
                 }}
               >
-                <option value="classic">经典 · 单栏</option>
-                <option value="modern">现代 · 墨绿</option>
-                <option value="compact">紧凑 · 精简</option>
-              </select>
+                <NativeSelectOption value="classic">经典 · 单栏</NativeSelectOption>
+                <NativeSelectOption value="modern">现代 · 墨绿</NativeSelectOption>
+                <NativeSelectOption value="compact">紧凑 · 精简</NativeSelectOption>
+              </NativeSelect>
             </label>
             <span className="paper-size">A4</span>
           </div>
@@ -752,10 +906,16 @@ export default function Editor({
           <p className="preview-footnote">导出使用浏览器打印，可选择“保存为 PDF”。长内容会自动分页。</p>
         </div>
       </div>
-      <button className="mobile-toggle button primary" onClick={() => setShowPreview(!showPreview)}>
+      <Button
+        variant="default"
+        size="default"
+        type="button"
+        className="mobile-toggle button primary"
+        onClick={() => setShowPreview(!showPreview)}
+      >
         <Eye size={17} />
         {showPreview ? '返回编辑' : '查看预览'}
-      </button>
+      </Button>
       {jobOpen && (
         <JobDialog
           document={document}
@@ -770,10 +930,19 @@ export default function Editor({
           <div className="modal-body">
             <p>手动删除无法通过 AI 修改记录撤回。你可以先另存副本。</p>
             <div className="modal-actions">
-              <button className="button secondary" onClick={() => setDeleting(null)}>
+              <Button
+                variant="outline"
+                size="default"
+                type="button"
+                className="button secondary"
+                onClick={() => setDeleting(null)}
+              >
                 取消
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="destructive"
+                size="default"
+                type="button"
                 className="button danger"
                 onClick={async () => {
                   await change((doc) => {
@@ -788,7 +957,7 @@ export default function Editor({
                 }}
               >
                 删除
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>

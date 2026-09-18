@@ -1,3 +1,7 @@
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { NativeSelectOption, NativeSelect } from '@/components/ui/native-select'
 import { useRef, useState } from 'react'
 import { extractJob } from '../ai'
 import { cloneResume } from '../domain'
@@ -75,14 +79,21 @@ export default function JobDialog({
         <p className="muted">上传 JD 截图或粘贴职位描述。校对后创建独立版本，原简历保持完整。</p>
         <ImagePicker images={images} onChange={setImages} notify={notify} disabled={busy} />
         {images.length > 0 && (
-          <button className="button secondary full-width" disabled={busy} onClick={() => void extract()}>
+          <Button
+            variant="outline"
+            size="default"
+            type="button"
+            className="button secondary full-width"
+            disabled={busy}
+            onClick={() => void extract()}
+          >
             发送到配置的 AI，识别 JD 截图
-          </button>
+          </Button>
         )}
         {warnings.length > 0 && <div className="notice warning">{warnings.join('；')}</div>}
         <label className="field">
           <span>岗位描述（请校对后再创建）</span>
-          <textarea
+          <Textarea
             rows={7}
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -93,11 +104,11 @@ export default function JobDialog({
         <div className="field-grid">
           <label className="field">
             <span>目标岗位</span>
-            <input value={role} onChange={(e) => setRole(e.target.value)} />
+            <Input value={role} onChange={(e) => setRole(e.target.value)} />
           </label>
           <label className="field">
             <span>招聘市场</span>
-            <input
+            <Input
               value={market}
               onChange={(e) => setMarket(e.target.value)}
               placeholder="例如：中国、新加坡、美国"
@@ -105,11 +116,11 @@ export default function JobDialog({
           </label>
           <label className="field">
             <span>简历语言</span>
-            <select value={locale} onChange={(e) => setLocale(e.target.value)}>
-              <option value="zh-CN">简体中文</option>
-              <option value="en">English</option>
-              <option value="ja">日本語</option>
-            </select>
+            <NativeSelect value={locale} onChange={(e) => setLocale(e.target.value)}>
+              <NativeSelectOption value="zh-CN">简体中文</NativeSelectOption>
+              <NativeSelectOption value="en">English</NativeSelectOption>
+              <NativeSelectOption value="ja">日本語</NativeSelectOption>
+            </NativeSelect>
           </label>
         </div>
         <p className="hint">
@@ -119,9 +130,16 @@ export default function JobDialog({
           <Busy label="正在处理…" onCancel={() => controller.current?.abort()} />
         ) : (
           <div className="modal-actions">
-            <button className="button primary" disabled={!text.trim()} onClick={() => void create()}>
+            <Button
+              variant="default"
+              size="default"
+              type="button"
+              className="button primary"
+              disabled={!text.trim()}
+              onClick={() => void create()}
+            >
               已校对，创建岗位版本
-            </button>
+            </Button>
           </div>
         )}
       </div>
