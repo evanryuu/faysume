@@ -1,6 +1,5 @@
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, ScanText } from 'lucide-react'
@@ -9,7 +8,7 @@ import { createResume } from '../domain'
 import { insertResume } from '../db'
 import type { AIConnection } from '../types'
 import type { PdfImport } from '../pdf'
-import { Modal, ImagePicker, Busy, errorMessage, type ImageInput, type Notify } from './ui'
+import { Modal, ImagePicker, Busy, errorMessage, readImages, type ImageInput, type Notify } from './ui'
 
 export default function ImportDialog({
   connection,
@@ -32,20 +31,31 @@ export default function ImportDialog({
     [sendPages, setSendPages] = useState(false),
     [error, setError] = useState('')
   const controller = useRef<AbortController | null>(null)
-  const pdfInput = useRef<HTMLInputElement>(null)
   useEffect(() => () => controller.current?.abort(), [])
-  const uploadPdf = async (file?: File) => {
-    if (!file || controller.current) return
+  const uploadFiles = async (files: File[]) => {
+    if (!files.length || controller.current) return
     const operation = new AbortController()
     controller.current = operation
     setError('')
     setReading(true)
     try {
-      const { readPdf } = await import('../pdf')
-      const result = await readPdf(file, { renderPages: true, signal: operation.signal })
+      const pdfFiles = files.filter((file) => file.type === 'application/pdf' || /\.pdf$/i.test(file.name))
+      const imageFiles = files.filter((file) => !pdfFiles.includes(file))
+      if (pdfFiles.length > 1) throw new Error('一次只能导入一份 PDF，可同时添加图片。')
+      if ((pdfFiles.length ? 1 : (pdf?.pageCount ?? 0)) + images.length + imageFiles.length > 5)
+        throw new Error('PDF 页面与图片合计最多 5 页，请先移除多余内容。')
+      const additions = await readImages(imageFiles)
+      let result = pdf
+      if (pdfFiles.length) {
+        const { readPdf } = await import('../pdf')
+        result = await readPdf(pdfFiles[0], { renderPages: true, signal: operation.signal })
+      }
       operation.signal.throwIfAborted()
+      if ((result?.pageCount ?? 0) + images.length + additions.length > 5)
+        throw new Error('PDF 页面与图片合计最多 5 页，请先移除多余内容。')
       setPdf(result)
-      setSendPages(result.imageOnlyPages.length > 0)
+      setImages([...images, ...additions])
+      if (pdfFiles.length) setSendPages(Boolean(result?.imageOnlyPages.length))
     } catch (error) {
       if (!operation.signal.aborted) setError(errorMessage(error))
     } finally {
@@ -67,7 +77,7 @@ export default function ImportDialog({
       const result = await extractResume(
         connection,
         [pdf?.text, input].filter(Boolean).join('\n\n'),
-        (pdf ? (sendPages ? pdf.images : []) : images).map((i) => i.dataUrl),
+        [...(pdf && sendPages ? pdf.images : []), ...images].map((i) => i.dataUrl),
         signal,
       )
       signal.throwIfAborted()
@@ -75,7 +85,7 @@ export default function ImportDialog({
       document.content = result.content
       document.warnings = result.warnings
       document.extractionReviewed = false
-      const sources = pdf ? pdf.images : images
+      const sources = [...(pdf?.images ?? []), ...images]
       document.sourceIds = sources.map((i) => i.id)
       await insertResume(
         document,
@@ -91,7 +101,7 @@ export default function ImportDialog({
     }
   }
   const ready = connectionReady(connection)
-  const needsVision = pdf ? sendPages : images.length > 0
+  const needsVision = sendPages || images.length > 0
   const locked = busy || reading
   return (
     <Modal title="导入 PDF、截图或文字，生成你的简历" onClose={close} wide>
@@ -103,29 +113,18 @@ export default function ImportDialog({
           <ArrowRight size={14} />
           <span>03 编辑与优化</span>
         </div>
-        <Button
-          variant="outline"
-          disabled={locked || images.length > 0}
-          onClick={() => pdfInput.current?.click()}
-        >
-          {pdf ? '更换 PDF' : '上传 PDF'}
-        </Button>
-        <Input
-          ref={pdfInput}
-          className="sr-only"
-          type="file"
-          accept=".pdf,application/pdf"
-          aria-label="上传简历 PDF"
-          disabled={locked || images.length > 0}
-          onChange={(event) => {
-            void uploadPdf(event.target.files?.[0])
-            event.target.value = ''
-          }}
+        <ImagePicker
+          images={images}
+          onChange={setImages}
+          notify={notify}
+          disabled={locked}
+          onFiles={uploadFiles}
         />
         <p className="hint">
-          PDF 最多 5 页、10MB，在本地解析。PDF 与截图分开导入；更换 PDF 不会清除下方手动输入的文字。
+          支持一份 PDF 和多张图片，合计最多 5 页。PDF 在本地解析；再次选择 PDF
+          可更换文件，保留图片和手动输入的文字。
         </p>
-        {pdf ? (
+        {pdf && (
           <section aria-label="PDF 预览">
             <p>
               {pdf.name} · {pdf.pageCount} 页
@@ -174,8 +173,6 @@ export default function ImportDialog({
               移除 PDF
             </Button>
           </section>
-        ) : (
-          <ImagePicker images={images} onChange={setImages} notify={notify} disabled={locked} />
         )}
         <div className="or-divider">也可以粘贴已有简历</div>
         <label className="field">
@@ -219,7 +216,7 @@ export default function ImportDialog({
         )}
         {locked ? (
           <Busy
-            label={reading ? '正在本地解析 PDF，请稍候…' : '正在识别和整理，请稍候…'}
+            label={reading ? '正在本地读取文件，请稍候…' : '正在识别和整理，请稍候…'}
             onCancel={() => controller.current?.abort()}
           />
         ) : (

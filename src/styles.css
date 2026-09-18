@@ -2511,3 +2511,21 @@ select {
     display: none;
   }
 }
+
+.add-content-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.add-content-actions > button {
+  flex: 1 1 160px;
+}
+.item-details-toggle {
+  margin-top: 10px;
+  color: #6c865b;
+}
+.dropzone strong,
+.dropzone > span:last-child {
+  white-space: normal;
+  text-align: center;
+}

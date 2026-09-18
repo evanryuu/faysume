@@ -37,16 +37,9 @@ import {
 import { analyzeResume, connectionReady } from '../ai'
 import { materialSnapshot, reviewContext, workflowFor } from '../workflow'
 import AgentChat from './AgentChat'
-import type {
-  AIConnection,
-  ItemField,
-  ProfileField,
-  ResumeDocument,
-  SectionKind,
-  Target,
-  Template,
-} from '../types'
+import type { AIConnection, ProfileField, ResumeDocument, SectionKind, Target, Template } from '../types'
 import ResumePaper from './ResumePaper'
+import ResumeItemEditor from './ResumeItemEditor'
 import JobDialog from './JobDialog'
 import { Busy, Field, Modal, errorMessage, type Notify } from './ui'
 
@@ -246,13 +239,6 @@ export default function Editor({
     ['location', '所在地'],
     ['website', '个人网站'],
   ]
-  const itemLabels: [ItemField, string][] = [
-    ['title', '职位 / 项目 / 学位'],
-    ['organization', '公司 / 学校'],
-    ['startDate', '开始时间'],
-    ['endDate', '结束时间'],
-    ['location', '地点'],
-  ]
   return (
     <div className="editor-page">
       <div className="editor-toolbar">
@@ -357,7 +343,7 @@ export default function Editor({
               <>
                 <div className="panel-heading">
                   <h2>你的经历，你来定义</h2>
-                  <p>填写真实内容，右侧即刻呈现。</p>
+                  <p>按需添加自由文本或经历条目，区块标题和顺序都可调整。</p>
                 </div>
                 <div className="editor-section">
                   <h3>基本信息</h3>
@@ -429,97 +415,37 @@ export default function Editor({
                       </div>
                     </div>
                     {section.items.map((item, i) => (
-                      <div className="item-editor" key={item.id}>
-                        <div className="item-label">
-                          <span>
-                            {String(i + 1).padStart(2, '0')} / {item.title || '新的经历'}
-                          </span>
-                          <div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              type="button"
-                              className="icon-button"
-                              aria-label={`上移经历 ${i + 1}`}
-                              disabled={i === 0}
-                              onClick={() => move(section.id, item.id, -1)}
-                            >
-                              <ArrowUp size={14} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              type="button"
-                              className="icon-button"
-                              aria-label={`下移经历 ${i + 1}`}
-                              disabled={i === section.items.length - 1}
-                              onClick={() => move(section.id, item.id, 1)}
-                            >
-                              <ArrowDown size={14} />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              type="button"
-                              className="icon-button"
-                              aria-label={`删除经历 ${i + 1}`}
-                              onClick={() => setDeleting({ sectionId: section.id, itemId: item.id })}
-                            >
-                              <Trash2 size={14} />
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="field-grid">
-                          {itemLabels.map(([field, label]) => (
-                            <Field
-                              key={field}
-                              label={label}
-                              value={item[field]}
-                              onCommit={(value, before) =>
-                                write(
-                                  { kind: 'item', sectionId: section.id, itemId: item.id, field },
-                                  value,
-                                  before,
-                                )
-                              }
-                            />
-                          ))}
-                          <Field
-                            label="经历描述"
-                            value={item.description}
-                            onCommit={(value, before) =>
-                              write(
-                                {
-                                  kind: 'item',
-                                  sectionId: section.id,
-                                  itemId: item.id,
-                                  field: 'description',
-                                },
-                                value,
-                                before,
-                              )
-                            }
-                            multiline
-                            placeholder="背景、你的行动，以及有证据支持的成果…"
-                          />
-                        </div>
-                      </div>
+                      <ResumeItemEditor
+                        key={item.id}
+                        item={item}
+                        sectionId={section.id}
+                        index={i}
+                        count={section.items.length}
+                        write={write}
+                        onMove={(offset) => move(section.id, item.id, offset)}
+                        onDelete={() => setDeleting({ sectionId: section.id, itemId: item.id })}
+                      />
                     ))}
-                    <Button
-                      variant="secondary"
-                      size="default"
-                      type="button"
-                      className="button subtle full-width"
-                      onClick={() =>
-                        void change((doc) => {
-                          doc.content.sections.find((s) => s.id === section.id)!.items.push(createItem())
-                          return doc
-                        })
-                      }
-                    >
-                      <Plus size={15} />
-                      添加一条经历
-                    </Button>
+                    <div className="add-content-actions">
+                      {(['text', 'entry'] as const).map((layout) => (
+                        <Button
+                          key={layout}
+                          variant="secondary"
+                          className="button subtle"
+                          onClick={() =>
+                            void change((doc) => {
+                              doc.content.sections
+                                .find((s) => s.id === section.id)!
+                                .items.push(createItem(layout))
+                              return doc
+                            })
+                          }
+                        >
+                          <Plus size={15} />
+                          {layout === 'text' ? '添加自由文本' : '添加经历条目'}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
                 ))}
                 <div className="add-section">
@@ -532,7 +458,7 @@ export default function Editor({
                     <NativeSelectOption value="project">项目经历</NativeSelectOption>
                     <NativeSelectOption value="education">教育背景</NativeSelectOption>
                     <NativeSelectOption value="skills">技能</NativeSelectOption>
-                    <NativeSelectOption value="other">其他经历</NativeSelectOption>
+                    <NativeSelectOption value="other">自定义区块</NativeSelectOption>
                   </NativeSelect>
                   <Button
                     variant="outline"
@@ -542,7 +468,9 @@ export default function Editor({
                     onClick={() =>
                       void change((doc) => {
                         const section = createSection(adding)
-                        section.items.push(createItem())
+                        section.items.push(
+                          createItem(adding === 'skills' || adding === 'other' ? 'text' : 'entry'),
+                        )
                         doc.content.sections.push(section)
                         return doc
                       })

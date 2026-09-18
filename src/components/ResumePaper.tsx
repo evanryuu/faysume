@@ -47,16 +47,18 @@ export default function ResumePaper({
           <h2>{section.title}</h2>
           {section.items.map((item) => (
             <div className="paper-item" key={item.id}>
-              <div className="paper-item-heading">
-                <div>
-                  <h3>{item.title}</h3>
-                  {item.organization && <p className="paper-organization">{item.organization}</p>}
+              {[item.title, item.organization, item.startDate, item.endDate, item.location].some(Boolean) && (
+                <div className="paper-item-heading">
+                  <div>
+                    {item.title && <h3>{item.title}</h3>}
+                    {item.organization && <p className="paper-organization">{item.organization}</p>}
+                  </div>
+                  <div className="paper-date">
+                    {[item.startDate, item.endDate].filter(Boolean).join(' — ')}
+                    {item.location && <span>{item.location}</span>}
+                  </div>
                 </div>
-                <div className="paper-date">
-                  {[item.startDate, item.endDate].filter(Boolean).join(' — ')}
-                  {item.location && <span>{item.location}</span>}
-                </div>
-              </div>
+              )}
               {item.description && <p className="paper-description">{item.description}</p>}
             </div>
           ))}

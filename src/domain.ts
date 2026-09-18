@@ -18,6 +18,7 @@ const itemSchema = z
     startDate: text,
     endDate: text,
     description: text,
+    layout: z.enum(['text', 'entry']).optional(),
   })
   .strict()
 const sectionSchema = z
@@ -153,7 +154,8 @@ const sectionNames: Record<SectionKind, string> = {
   skills: '技能',
   other: '其他经历',
 }
-export const createItem = (): ResumeItem => ({
+export const createItem = (layout: 'text' | 'entry' = 'entry'): ResumeItem => ({
+  layout,
   id: uid(),
   title: '',
   organization: '',

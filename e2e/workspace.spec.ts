@@ -103,7 +103,7 @@ test('screenshot extraction, fact review, suggestion apply and undo, JD copy, no
       'base64',
     ),
   }
-  await page.getByLabel('上传截图文件').setInputFiles(screenshot)
+  await page.getByLabel('上传简历 PDF 或图片').setInputFiles(screenshot)
   await page.getByRole('button', { name: '识别并生成简历' }).click()
   await expect(page.getByLabel('姓名', { exact: true })).toHaveValue('测试候选人')
   expect(imageRequest).toBe(true)
