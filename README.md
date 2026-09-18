@@ -44,7 +44,22 @@ npm run preview
 
 同一个 Worker 托管前端静态资源和 `/api/*`，无需独立后端域名。构建产物位于 `dist/client` 和 `dist/resume_studio`，Wrangler 使用 Vite 插件生成的配置。只有静态部署 Pages 时，对话助手接口不可用。
 
-准备部署时，通过 `npx wrangler secret put <名称>` 配置上述服务端参数，然后执行 `npm run deploy`。首次使用需登录 Cloudflare。部署不自动完成，本地构建不会发布站点。
+### Push 自动部署
+
+`.github/workflows/deploy-production.yml` 在每次 push 到 `main` 后运行：安装依赖 → 单元测试 → TypeScript 检查和生产构建 → 部署前端与 Worker → 核对线上页面、静态资源和 API。成功后，GitHub 的 `production` 环境会关联本次 commit 和线上地址。其他分支、PR 和 tag 不会触发生产部署；也可以在 Actions 中选择 `Deploy production`，从 `main` 手动运行。
+
+首次启用需要在仓库 **Settings → Secrets and variables → Actions**（或 `production` 环境 Secrets）配置：
+
+| Secret | 内容 |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | Cloudflare 部署 Token。按照[官方说明](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/)使用 `Edit Cloudflare Workers` 模板，限定部署账户及 `evanryuu.me` 域名，不要放入代码或聊天。 |
+| `CLOUDFLARE_ACCOUNT_ID` | `resume-studio` Worker 所属的 Cloudflare Account ID。 |
+
+缺少凭证时，工作流会明确失败，不会修改线上站点。配置完成后，可以重跑失败任务。部署使用 `--keep-vars` 保留控制台配置的变量，已有 Worker Secrets 不由工作流覆盖；AI 模型密钥、站点口令等仍应在 Cloudflare Worker 中单独设置，不需要交给 GitHub。部署后的检查不调用付费模型，不能证明 AI 模型已配置或可用。
+
+工作流会串行部署；GitHub concurrency 在连续多次 push 时可能合并等待中的任务，优先部署最新提交。线上校验失败时会标记失败，但不会自动回滚已经发布的 Worker，请检查日志后重跑或通过 Cloudflare 回滚。旧的“仅记录部署”工作流已替换，不再允许手动把未发布的 SHA 标为成功。
+
+本地手动部署仍可使用 `npm run deploy`；首次使用需登录 Cloudflare。仅运行 `npm run build` 不会发布站点。
 
 目前使用一个站点访问口令，适合个人或受信任的小范围试用；未实现多用户账号、按用户限流或计费。简历和会话保存在浏览器，Worker 不存储简历，也不会跨设备同步。
 

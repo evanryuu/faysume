@@ -1,0 +1,103 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Finish the current deployment before starting another; never interrupt an upload.
+concurrency:
+  group: faysume-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'evanryuu/faysume' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://faysume.evanryuu.me
+    permissions:
+      contents: read
+      deployments: write
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Test
+        run: ALLOW_HEAVY=1 npm test
+      - name: Build frontend and Worker
+        run: ALLOW_HEAVY=1 npm run build
+      - name: Check deployment credentials
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [[ -z "$CLOUDFLARE_API_TOKEN" || -z "$CLOUDFLARE_ACCOUNT_ID" ]]; then
+            echo '::error::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in repository or production environment Secrets. See README: Cloudflare 部署.'
+            exit 1
+          fi
+      - name: Deploy frontend and Worker
+        uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd # v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.134.0'
+          command: deploy --keep-vars --message "GitHub commit ${{ github.sha }}"
+      - name: Verify live deployment
+        env:
+          SITE_URL: https://faysume.evanryuu.me
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { readFileSync } from 'node:fs';
+          import { setTimeout } from 'node:timers/promises';
+
+          const expected = readFileSync('dist/client/index.html', 'utf8');
+          const assets = [...expected.matchAll(/(?:src|href)="(\/assets\/[^"\s]+)"/g)].map(match => match[1]);
+          assert(assets.length > 0, 'Build must include frontend assets');
+          const fetchLive = async path => {
+            const response = await fetch(new URL(path, process.env.SITE_URL), {
+              cache: 'no-store', signal: AbortSignal.timeout(15000),
+            });
+            assert(response.ok, `${path}: HTTP ${response.status}`);
+            return response;
+          };
+          for (let attempt = 1; attempt <= 6; attempt++) {
+            try {
+              for (const path of ['/', '/materials', '/settings']) {
+                assert.equal(await (await fetchLive(path)).text(), expected, `${path}: stale frontend build`);
+              }
+              for (const path of assets) {
+                const actual = Buffer.from(await (await fetchLive(path)).arrayBuffer());
+                assert(actual.equals(readFileSync(`dist/client${path}`)), `${path}: asset mismatch`);
+              }
+              const config = await (await fetchLive('/api/config')).json();
+              for (const key of ['configured', 'vision', 'search', 'agent']) {
+                assert.equal(typeof config[key], 'boolean', `Invalid API configuration: ${key}`);
+              }
+              console.log('Verified current frontend build, routes, assets and backend.');
+              break;
+            } catch (error) {
+              if (attempt === 6) throw error;
+              console.log(`Deployment check ${attempt}/6 failed; retrying in 5 seconds.`);
+              await setTimeout(5000);
+            }
+          }
+          NODE
+      - name: Publish deployment summary
+        run: |
+          printf '### Production\n\n[Open Faysume](https://faysume.evanryuu.me)\n\nDeployed commit: `%s`\n' \
+            "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
