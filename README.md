@@ -38,6 +38,8 @@ npm run preview
 
 ## Cloudflare 部署
 
+生产域名为 `https://faysume.evanryuu.me`，通过 `wrangler.jsonc` 的自定义域名绑定到 `resume-studio` Worker，前端和 API 使用同一域名。
+
 同一个 Worker 托管前端静态资源和 `/api/*`，无需独立后端域名。构建产物位于 `dist/client` 和 `dist/resume_studio`，Wrangler 使用 Vite 插件生成的配置。只有静态部署 Pages 时，对话助手接口不可用。
 
 准备部署时，通过 `npx wrangler secret put <名称>` 配置上述服务端参数，然后执行 `npm run deploy`。首次使用需登录 Cloudflare。部署不自动完成，本地构建不会发布站点。
