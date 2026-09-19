@@ -21,9 +21,9 @@ test('create, edit, persist, duplicate and change template without losing conten
   await expect(page.getByRole('button', { name: '打开 未命名简历 · 副本', exact: true })).toBeVisible()
 })
 
-test('screenshot extraction, fact review, suggestion apply and undo, JD copy, no key persistence', async ({
+test('screenshot extraction, fact review, suggestion apply and undo, JD copy, key persistence', async ({
   page,
-}) => {
+}, testInfo) => {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   const content = {
@@ -113,6 +113,23 @@ test('screenshot extraction, fact review, suggestion apply and undo, JD copy, no
   await page.getByRole('button', { name: 'AI 建议', exact: true }).click()
   await page.getByRole('button', { name: '开始 AI 分析' }).click()
   await expect(page.getByText('专注前端页面开发', { exact: true })).toBeVisible()
+  await expect(page.locator('.suggestion del')).toHaveText('参与')
+  await expect(page.locator('.suggestion del')).toHaveCSS('text-decoration-line', 'line-through')
+  await expect(page.locator('.suggestion ins')).toHaveText(['专注', '页面'])
+  await expect(page.locator('.suggestion .before .diff-unchanged')).toHaveText(['前端', '开发'])
+  await expect(page.locator('.suggestion .after .diff-unchanged')).toHaveText(['前端', '开发'])
+  const viewport = page.viewportSize()!
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 900 })
+    await page.getByRole('group', { name: '修改对比' }).evaluate((element) => {
+      element.scrollIntoView({ block: 'center' })
+    })
+    await page.getByRole('group', { name: '修改对比' }).screenshot({
+      path: testInfo.outputPath(`suggestion-diff-${width}.png`),
+    })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+  }
+  await page.setViewportSize(viewport)
   await expect(page.getByRole('button', { name: '采纳修改' })).toBeDisabled()
   await page.getByLabel('我已核对，修改后的事实准确').check()
   await page.getByRole('button', { name: '采纳修改' }).click()
@@ -132,7 +149,7 @@ test('screenshot extraction, fact review, suggestion apply and undo, JD copy, no
   await expect(page.getByLabel('简历名称')).toHaveValue('测试候选人的简历 · 高级前端')
   await page.reload()
   await page.getByRole('button', { name: 'AI 设置' }).click()
-  await expect(page.getByLabel('API Key', { exact: true })).toHaveValue('')
+  await expect(page.getByLabel('API Key', { exact: true })).toHaveValue('secret-test-key')
   await expect(page.getByLabel('模型名称')).toHaveValue('test-vision')
   expect(errors).toEqual([])
 })

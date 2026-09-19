@@ -37,6 +37,7 @@ import {
 import { analyzeResume, connectionReady } from '../ai'
 import { materialSnapshot, reviewContext, workflowFor } from '../workflow'
 import AgentChat from './AgentChat'
+import SuggestionDiff from './SuggestionDiff'
 import type { AIConnection, ProfileField, ResumeDocument, SectionKind, Target, Template } from '../types'
 import PaginatedPreview from './PaginatedPreview'
 import ResumeItemEditor from './ResumeItemEditor'
@@ -654,14 +655,7 @@ export default function Editor({
                   <article className="suggestion" key={suggestion.id}>
                     <span className="eyebrow">{targetLabel(document.content, suggestion.target)}</span>
                     <p className="suggestion-reason">{suggestion.reason}</p>
-                    <div className="diff before">
-                      <small>原文</small>
-                      <p>{suggestion.before || '（空）'}</p>
-                    </div>
-                    <div className="diff after">
-                      <small>建议</small>
-                      <p>{suggestion.after}</p>
-                    </div>
+                    <SuggestionDiff before={suggestion.before} after={suggestion.after} />
                     <p className="hint">参考来源：{suggestion.evidence.join('、')}</p>
                     {suggestion.reviewContext === reviewContext(document) &&
                       suggestion.references?.map((id) => {

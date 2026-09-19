@@ -122,10 +122,11 @@ export default function Settings({
                 type="password"
                 autoComplete="off"
                 value={connection.apiKey}
-                placeholder="仅保存在当前页面内存中"
+                placeholder="自动保存在当前浏览器中"
                 onChange={(e) => update({ apiKey: e.target.value })}
               />
             </label>
+            <p className="hint">API Key 自动保存在此浏览器，刷新或重新打开无需再输入；可随时清除凭证。</p>
             <label className="field">
               <span>模型名称</span>
               <Input
@@ -196,7 +197,8 @@ export default function Settings({
             Tavily。简历和对话历史仍保存在本机。
           </p>
           <p>
-            浏览器直连需要服务商允许 CORS。API Key 和站点访问口令不会进入本地数据库或备份，刷新后需重新输入。
+            浏览器直连需要服务商允许 CORS。API Key 保存在当前浏览器的本地存储中，不会进入简历备份。
+            站点访问口令仅在当前页面内存中，刷新后需重新输入。
           </p>
         </div>
       </div>
