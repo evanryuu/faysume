@@ -46,7 +46,9 @@ import type {
   Target,
   Template,
 } from '../types'
-import ResumePaper from './ResumePaper'
+import ResumePreview from './ResumePreview'
+import AppearancePanel from './AppearancePanel'
+import { defaultAppearance, resolveAppearance } from '../appearance'
 import JobDialog from './JobDialog'
 import { Busy, Field, Modal, errorMessage, type Notify } from './ui'
 
@@ -75,6 +77,7 @@ export default function Editor({
   notify: Notify
 }) {
   const [jobOpen, setJobOpen] = useState(false),
+    [appearanceOpen, setAppearanceOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [adding, setAdding] = useState<SectionKind>('work'),
     [deleting, setDeleting] = useState<{ sectionId: string; itemId?: string } | null>(null),
@@ -883,7 +886,17 @@ export default function Editor({
         </div>
         <div className={`preview-panel ${!showPreview ? 'mobile-hidden-preview' : ''}`}>
           <div className="preview-toolbar">
-            <span>实时预览</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-expanded={appearanceOpen}
+              aria-controls="resume-appearance"
+              onClick={() => setAppearanceOpen(!appearanceOpen)}
+            >
+              <SlidersHorizontal size={15} aria-hidden="true" />
+              外观
+            </Button>
             <label>
               <span className="sr-only">简历模板</span>
               <NativeSelect
@@ -894,15 +907,25 @@ export default function Editor({
                 }}
               >
                 <NativeSelectOption value="classic">经典 · 单栏</NativeSelectOption>
-                <NativeSelectOption value="modern">现代 · 墨绿</NativeSelectOption>
+                <NativeSelectOption value="modern">现代 · 色块</NativeSelectOption>
                 <NativeSelectOption value="compact">紧凑 · 精简</NativeSelectOption>
               </NativeSelect>
             </label>
             <span className="paper-size">A4</span>
           </div>
-          <div className="paper-canvas">
-            <ResumePaper document={document} />
-          </div>
+          {appearanceOpen && (
+            <AppearancePanel
+              value={document.appearance}
+              onChange={(patch) =>
+                void change((doc) => ({
+                  ...doc,
+                  appearance: { ...resolveAppearance(doc.appearance), ...patch },
+                }))
+              }
+              onReset={() => void change((doc) => ({ ...doc, appearance: { ...defaultAppearance } }))}
+            />
+          )}
+          <ResumePreview document={document} />
           <p className="preview-footnote">导出使用浏览器打印，可选择“保存为 PDF”。长内容会自动分页。</p>
         </div>
       </div>

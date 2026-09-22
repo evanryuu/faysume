@@ -26,6 +26,27 @@ function source(resumeId: string): Source {
 }
 
 describe('local repository', () => {
+  it('persists appearance, restores it from backup and accepts legacy backups', async () => {
+    const doc = createResume('外观测试')
+    await insertResume(doc)
+    await mutateResume(doc.id, (current) => ({
+      ...current,
+      appearance: { ...current.appearance!, accentColor: '#24548a', margin: 22, fontSize: 12 },
+    }))
+    db.close()
+    await db.open()
+    const saved = (await db.resumes.get(doc.id))!
+    expect(saved.appearance).toMatchObject({ accentColor: '#24548a', margin: 22, fontSize: 12 })
+    const backup = await exportBackup()
+    await importBackup(backup)
+    const restored = (await db.resumes.toArray()).find((item) => item.id !== doc.id)!
+    expect(restored.appearance).toEqual(saved.appearance)
+    const legacy = JSON.parse(backup)
+    delete legacy.resumes[0].appearance
+    await importBackup(JSON.stringify(legacy))
+    expect(await db.resumes.count()).toBe(3)
+    expect((await db.resumes.toArray()).filter((item) => !item.appearance)).toHaveLength(1)
+  })
   it('persists conversation and approval state; backup restores a draft without old approvals', async () => {
     const doc = createResume('对话测试')
     doc.workflow = {
@@ -44,7 +65,11 @@ describe('local repository', () => {
     db.close()
     await db.open()
     expect((await db.resumes.get(doc.id))?.conversation?.messages).toHaveLength(1)
-    await mutateResume(doc.id, (d) => ({ ...d, template: 'modern' }))
+    await mutateResume(doc.id, (d) => ({
+      ...d,
+      template: 'modern',
+      appearance: { ...d.appearance!, fontSize: 12 },
+    }))
     expect((await db.resumes.get(doc.id))?.workflow?.confirmed).toBe(true)
     await importBackup(await exportBackup())
     const restored = (await db.resumes.toArray()).find((d) => d.id !== doc.id)!

@@ -59,11 +59,20 @@ export interface HistoryEntry {
   reverted: boolean
 }
 export type Template = 'classic' | 'modern' | 'compact'
+export interface ResumeAppearance {
+  accentColor: string
+  fontFamily: 'sans' | 'serif' | 'mono'
+  fontSize: number
+  lineHeight: number
+  spacing: 'compact' | 'standard' | 'relaxed'
+  margin: number
+}
 export interface ResumeDocument {
   id: string
   name: string
   revision: number
   template: Template
+  appearance?: ResumeAppearance
   locale: string
   market: string
   targetRole: string

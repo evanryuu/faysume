@@ -1,4 +1,5 @@
 import type { ResumeDocument } from '../types'
+import { appearanceStyle, resolveAppearance } from '../appearance'
 
 function safeLink(value: string) {
   try {
@@ -19,6 +20,8 @@ export default function ResumePaper({
   return (
     <article
       className={`resume-paper template-${document.template} ${miniature ? 'miniature' : ''}`}
+      data-appearance="true"
+      style={appearanceStyle(resolveAppearance(document.appearance))}
       data-testid={miniature ? undefined : 'resume-paper'}
       lang={document.locale}
     >
