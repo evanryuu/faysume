@@ -2,6 +2,7 @@ export type ProfileField = 'name' | 'headline' | 'email' | 'phone' | 'location' 
 export type ItemField = 'title' | 'organization' | 'location' | 'startDate' | 'endDate' | 'description'
 export type SectionKind = 'work' | 'project' | 'education' | 'skills' | 'other'
 export interface ResumeItem {
+  layout?: 'text' | 'entry'
   id: string
   title: string
   organization: string

@@ -36,7 +36,7 @@ function loadConnection(): AIConnection {
       model: typeof saved.model === 'string' ? saved.model : '',
       vision: saved.vision === true,
       jsonMode: saved.jsonMode === true,
-      apiKey: '',
+      apiKey: typeof saved.apiKey === 'string' ? saved.apiKey : '',
       accessToken: '',
     }
   } catch {
@@ -105,8 +105,8 @@ export default function App(): React.JSX.Element {
   const saveConnection = (next: AIConnection) => {
     setConnection(next)
     try {
-      const { apiKey: _key, accessToken: _token, ...nonSecret } = next
-      localStorage.setItem('resume-studio-ai', JSON.stringify(nonSecret))
+      const { accessToken: _token, ...saved } = next
+      localStorage.setItem('resume-studio-ai', JSON.stringify({ ...saved, apiKey: next.apiKey || undefined }))
     } catch {
       notify('浏览器无法保存模型设置，当前页面仍可使用。', 'error')
     }

@@ -79,7 +79,7 @@ test('text PDF parses locally, preserves all pages, imports without vision and k
   })
   await configure(page)
   await page.getByLabel('简历原文', { exact: true }).fill('Additional facts')
-  await page.getByLabel('上传简历 PDF').setInputFiles(upload(pdfFixture([pageOne, pageTwo])))
+  await page.getByLabel('上传简历 PDF 或图片').setInputFiles(upload(pdfFixture([pageOne, pageTwo])))
   await expect(page.getByLabel('PDF 提取文字（可校对）')).toContainText(pageTwo)
   await expect(page.getByRole('region', { name: 'PDF 预览' }).getByRole('img')).toHaveCount(2)
   expect(requests).toHaveLength(0)
@@ -106,7 +106,7 @@ test('mixed scanned PDF requires vision and sends rendered pages only after conf
     await route.fulfill({ status: 400, json: {} })
   })
   await configure(page)
-  await page.getByLabel('上传简历 PDF').setInputFiles(upload(pdfFixture([pageOne, null])))
+  await page.getByLabel('上传简历 PDF 或图片').setInputFiles(upload(pdfFixture([pageOne, null])))
   await expect(page.getByText(/第 2 页文字不足/)).toBeVisible()
   await expect(page.getByRole('button', { name: '识别并生成简历' })).toBeDisabled()
   expect(called).toBe(false)
@@ -115,7 +115,7 @@ test('mixed scanned PDF requires vision and sends rendered pages only after conf
   await page.getByLabel('这个模型支持图片输入').check()
   await page.getByRole('button', { name: /我的简历/ }).click()
   await page.getByRole('button', { name: '上传简历 PDF / 截图', exact: true }).click()
-  await page.getByLabel('上传简历 PDF').setInputFiles(upload(pdfFixture([pageOne, null])))
+  await page.getByLabel('上传简历 PDF 或图片').setInputFiles(upload(pdfFixture([pageOne, null])))
   await expect(page.getByRole('button', { name: '识别并生成简历' })).toBeEnabled()
   expect(called).toBe(false)
   await page.getByRole('button', { name: '识别并生成简历' }).click()
@@ -153,7 +153,7 @@ test('invalid, encrypted and oversized PDFs fail explicitly without replacing an
   page,
 }) => {
   await configure(page)
-  const file = page.getByLabel('上传简历 PDF')
+  const file = page.getByLabel('上传简历 PDF 或图片')
   await file.setInputFiles(upload(pdfFixture([pageOne])))
   await expect(page.getByLabel('PDF 提取文字（可校对）')).toContainText(pageOne)
   for (const [buffer, message] of [
@@ -165,12 +165,12 @@ test('invalid, encrypted and oversized PDFs fail explicitly without replacing an
   ] as const) {
     await file.setInputFiles(upload(buffer))
     await expect(page.getByRole('alert')).toContainText(message)
-    await expect(page.getByRole('button', { name: '更换 PDF', exact: true })).toBeEnabled()
+    await expect(page.getByRole('button', { name: '选择或拖入 PDF、图片，也可粘贴截图' })).toBeEnabled()
     await expect(page.getByLabel('PDF 提取文字（可校对）')).toContainText(pageOne)
   }
   await page.setViewportSize({ width: 390, height: 844 })
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
   await page.getByRole('button', { name: '移除 PDF' }).click()
   await expect(page.getByLabel('PDF 提取文字（可校对）')).toHaveCount(0)
-  await expect(page.getByLabel('上传截图文件')).toBeAttached()
+  await expect(page.getByLabel('上传简历 PDF 或图片')).toBeAttached()
 })

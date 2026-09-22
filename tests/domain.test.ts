@@ -157,3 +157,25 @@ describe('resume domain', () => {
     ).toBe(false)
   })
 })
+
+it('preserves text/entry layouts through validation, copy and AI edits while accepting legacy items', () => {
+  const doc = createResume()
+  const section = createSection('other')
+  const textItem = { ...createItem('text'), description: '开源贡献\n社区文档' }
+  const legacy = { ...createItem(), description: '旧简历文本' }
+  delete legacy.layout
+  section.items = [textItem, createItem('entry'), legacy]
+  doc.content.sections = [section]
+  const parsed = documentSchema.parse(JSON.parse(JSON.stringify(doc)))
+  expect(parsed.content.sections[0].items.map((item) => item.layout)).toEqual(['text', 'entry', undefined])
+  const copied = cloneResume(parsed)
+  expect(copied.content.sections[0].items[0].description).toBe(textItem.description)
+  const target = {
+    kind: 'item' as const,
+    sectionId: section.id,
+    itemId: textItem.id,
+    field: 'description' as const,
+  }
+  const edited = writeTarget(parsed.content, target, '更新开源贡献')
+  expect(edited.sections[0].items[0]).toMatchObject({ layout: 'text', description: '更新开源贡献' })
+})
