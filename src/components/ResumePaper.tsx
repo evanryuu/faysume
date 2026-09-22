@@ -40,7 +40,7 @@ export default function ResumePaper({
         placeholder={placeholder}
         onCommit={(next, before) => onEdit!(target, next, before)}
       />
-    ) : previewCopy ? (
+    ) : previewCopy || multiline ? (
       <PaperText value={value || placeholder} multiline={multiline} inline={inline} />
     ) : (
       value || placeholder
@@ -86,7 +86,7 @@ export default function ResumePaper({
       {c.summary && (
         <section className="paper-section">
           <h2>{document.locale.startsWith('zh') ? '个人简介' : 'Profile'}</h2>
-          <p className="paper-description">{profile('summary', '个人简介', true)}</p>
+          <div className="paper-description">{profile('summary', '个人简介', true)}</div>
         </section>
       )}
       {c.sections.map((section) => (
@@ -124,7 +124,7 @@ export default function ResumePaper({
                   </div>
                 )}
                 {item.description && (
-                  <p className="paper-description">{itemText('description', '文本内容', true)}</p>
+                  <div className="paper-description">{itemText('description', '文本内容', true)}</div>
                 )}
               </div>
             )

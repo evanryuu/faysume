@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import ResumeMarkdown from './ResumeMarkdown'
 
-/** Shared by editing, pagination and print, including preserved trailing blank lines. */
+/** Keep rendered content identical in editing, pagination and print. */
 export function PaperText({
   value,
   multiline = false,
@@ -12,14 +13,26 @@ export function PaperText({
   inline?: boolean
   children?: ReactNode
 }) {
+  const Tag = multiline ? 'div' : 'span'
   return (
-    <span className={`paper-editable${inline ? ' paper-editable-inline' : ''}`}>
-      <span className="paper-editable-mirror" aria-hidden={children ? true : undefined}>
-        {value}
-        {multiline ? '\u200b' : ''}
-      </span>
+    <Tag
+      className={`paper-editable${inline ? ' paper-editable-inline' : ''}${multiline ? ' paper-editable-markdown' : ''}`}
+    >
+      <Tag
+        className="paper-editable-mirror"
+        aria-hidden={children ? true : undefined}
+        inert={children ? true : undefined}
+      >
+        {multiline ? <ResumeMarkdown value={value} /> : value}
+      </Tag>
+      {multiline && children && (
+        <div className="paper-editable-source" aria-hidden="true">
+          {value}
+          {'\u200b'}
+        </div>
+      )}
       {children}
-    </span>
+    </Tag>
   )
 }
 

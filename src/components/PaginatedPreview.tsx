@@ -31,7 +31,8 @@ export default function PaginatedPreview({
     const measure = () => {
       if (!active) return
       const width = flow.getBoundingClientRect().width
-      if (width) setPages(Math.max(1, Math.ceil((flow.scrollWidth - 1) / width)))
+      const gap = parseFloat(getComputedStyle(flow).columnGap) || 0
+      if (width) setPages(Math.max(1, Math.ceil((flow.scrollWidth + gap - 1) / (width + gap))))
       // The canvas includes 20px of breathing room on either side of the paper.
       if (host.clientWidth)
         setScale(Math.min(1, Math.max(0.1, (host.clientWidth - 40) / ((210 * 96) / 25.4))))
@@ -111,18 +112,20 @@ export default function PaginatedPreview({
                 <div className="preview-page-label">
                   第 {index + 1} 页 / 共 {pages} 页
                 </div>
-                <div
-                  className="preview-sheet"
-                  data-testid="preview-page"
-                  role="img"
-                  aria-label={`简历第 ${index + 1} 页，共 ${pages} 页`}
-                >
-                  <div className="page-content" aria-hidden="true" inert>
-                    <div
-                      className="page-flow print-layout"
-                      style={{ transform: `translateX(${-index * contentWidth}mm)` }}
-                    >
-                      <ResumePaper document={resume} previewCopy />
+                <div className="preview-sheet-frame">
+                  <div
+                    className="preview-sheet"
+                    data-testid="preview-page"
+                    role="img"
+                    aria-label={`简历第 ${index + 1} 页，共 ${pages} 页`}
+                  >
+                    <div className="page-content" aria-hidden="true" inert>
+                      <div
+                        className="page-flow print-layout"
+                        style={{ transform: `translateX(${-index * 210}mm)` }}
+                      >
+                        <ResumePaper document={resume} previewCopy />
+                      </div>
                     </div>
                   </div>
                 </div>

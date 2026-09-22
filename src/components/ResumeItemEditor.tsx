@@ -93,8 +93,8 @@ export default function ResumeItemEditor({
           multiline
           placeholder={
             isText
-              ? '自由记录技能、开源贡献、获奖或其他内容，支持换行…'
-              : '背景、你的行动，以及有证据支持的成果…'
+              ? '自由记录技能、开源贡献、获奖或其他内容，支持 Markdown…'
+              : '背景、你的行动，以及有证据支持的成果，支持 Markdown…'
           }
         />
       </div>
