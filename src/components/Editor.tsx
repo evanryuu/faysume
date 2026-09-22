@@ -350,6 +350,7 @@ export default function Editor({
                 <div className="panel-heading">
                   <h2>你的经历，你来定义</h2>
                   <p>按需添加自由文本或经历条目，区块标题和顺序都可调整。</p>
+                  <p>个人简介和正文支持 Markdown：**粗体**、- 列表、[文字](链接)。</p>
                 </div>
                 <div className="editor-section">
                   <h3>基本信息</h3>

@@ -1537,6 +1537,20 @@ select {
 .paper-editable:focus-within .paper-editable-mirror {
   visibility: hidden;
 }
+.paper-editable-markdown {
+  white-space: normal;
+}
+.paper-editable-source {
+  display: none;
+  visibility: hidden;
+  white-space: pre-wrap;
+}
+.paper-editable-markdown:focus-within .paper-editable-mirror {
+  display: none;
+}
+.paper-editable-markdown:focus-within .paper-editable-source {
+  display: block;
+}
 .paper-editable-control {
   position: absolute;
   inset: 0;
@@ -2602,7 +2616,8 @@ select {
   width: var(--page-content-width);
   height: var(--page-content-height);
   columns: 1;
-  column-gap: 0;
+  /* Keep outside list markers from the next column out of the current sheet. */
+  column-gap: calc(var(--resume-margin) * 2);
   column-fill: auto;
 }
 .preview-page-group {
@@ -2622,14 +2637,28 @@ select {
   padding: var(--resume-margin);
   margin: 0 auto;
   background: white;
+  zoom: var(--preview-scale, 1);
+}
+.preview-sheet-frame,
+.editing-sheet {
   box-shadow:
     0 2px 12px #23362c14,
     0 0 0 1px #23362c0a;
-  zoom: var(--preview-scale, 1);
+}
+.preview-sheet-frame {
+  width: calc(210mm * var(--preview-scale, 1));
+  height: calc(297mm * var(--preview-scale, 1));
+  margin: 0 auto;
+  overflow: clip;
 }
 .preview-sheet {
   height: 297mm;
+  margin: 0;
   overflow: hidden;
+  /* Transform preserves A4 line wrapping and pagination at narrow viewport sizes. */
+  zoom: 1;
+  transform: scale(var(--preview-scale, 1));
+  transform-origin: top left;
 }
 .page-content {
   width: var(--page-content-width);
@@ -2683,6 +2712,12 @@ select {
   }
   .paper-editable .paper-editable-mirror {
     visibility: visible !important;
+  }
+  .paper-editable-markdown .paper-editable-mirror {
+    display: block !important;
+  }
+  .paper-editable-source {
+    display: none !important;
   }
   @page {
     size: A4 portrait;
@@ -2838,6 +2873,122 @@ select {
 }
 .resume-paper[data-appearance].template-compact .paper-header h1 {
   font-size: calc(var(--resume-size) * 1.9) !important;
+}
+/* Markdown uses the document's typography without inheriting template section decorations. */
+.resume-markdown {
+  white-space: normal;
+  min-height: 1em;
+  overflow-wrap: anywhere;
+}
+.resume-markdown :is(p, ul, ol, blockquote, pre, table) {
+  margin: 0.55em 0;
+}
+.resume-markdown p {
+  white-space: pre-wrap;
+  line-height: inherit;
+}
+.resume-markdown :is(ul, ol) {
+  padding-left: 1.6em;
+  list-style-position: outside;
+}
+.resume-markdown ul {
+  list-style-type: disc;
+}
+.resume-markdown ol {
+  list-style-type: decimal;
+}
+.resume-markdown ul ul {
+  list-style-type: circle;
+}
+.resume-markdown li > :is(ul, ol) {
+  margin: 0.15em 0;
+}
+.resume-markdown li + li {
+  margin-top: 0.15em;
+}
+.resume-markdown li > p {
+  margin: 0.25em 0;
+}
+.resume-paper[data-appearance] .paper-description .resume-markdown :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--resume-heading);
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0.75em 0 0.3em;
+  font-size: 1.05em !important;
+  font-weight: 700;
+  line-height: inherit;
+  letter-spacing: normal;
+  break-after: avoid;
+}
+.resume-markdown strong {
+  font-weight: 700;
+}
+.resume-markdown em {
+  font-style: italic;
+}
+.resume-markdown a {
+  color: var(--resume-heading);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+.resume-markdown blockquote {
+  border-left: 2pt solid var(--resume-rule);
+  padding-left: 0.8em;
+  color: var(--resume-muted);
+}
+.resume-markdown :is(code, pre) {
+  font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  font-size: 0.9em;
+  background: color-mix(in srgb, var(--resume-rule) 35%, white);
+}
+.resume-markdown code {
+  padding: 0.1em 0.25em;
+  border-radius: 2px;
+}
+.resume-markdown pre {
+  padding: 0.6em 0.8em;
+  white-space: pre-wrap;
+}
+.resume-markdown pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+.resume-markdown table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+.resume-markdown :is(th, td) {
+  border: 1px solid var(--resume-rule);
+  padding: 0.3em 0.5em;
+  text-align: start;
+  vertical-align: top;
+}
+.resume-markdown th {
+  font-weight: 700;
+}
+.resume-markdown tr {
+  break-inside: avoid;
+}
+.resume-markdown hr {
+  border: 0;
+  border-top: 1px solid var(--resume-rule);
+  margin: 0.8em 0;
+}
+.resume-markdown .contains-task-list {
+  list-style: none;
+}
+.resume-markdown .task-list-item > input {
+  margin: 0 0.45em 0 -1.4em;
+  accent-color: var(--resume-heading);
+}
+.resume-markdown > :first-child {
+  margin-top: 0 !important;
+}
+.resume-markdown > :last-child {
+  margin-bottom: 0 !important;
 }
 .appearance-panel {
   flex-shrink: 0;
