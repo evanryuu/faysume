@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { appearanceSchema, defaultAppearance } from './appearance'
 import { reviewContext, workflowSchema } from './workflow'
 import type { ResumeContent, ResumeDocument, ResumeItem, ResumeSection, SectionKind, Target } from './types'
 
@@ -83,6 +84,7 @@ export const documentSchema = z
     name: text,
     revision: z.number().int().nonnegative(),
     template: z.enum(['classic', 'modern', 'compact']),
+    appearance: appearanceSchema.optional(),
     locale: text,
     market: text,
     targetRole: text,
@@ -175,6 +177,7 @@ export function createResume(name = '未命名简历'): ResumeDocument {
     name,
     revision: 0,
     template: 'classic',
+    appearance: { ...defaultAppearance },
     locale: 'zh-CN',
     market: '',
     targetRole: '',
