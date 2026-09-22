@@ -146,11 +146,13 @@ export function ImagePicker({
   onChange,
   notify,
   disabled = false,
+  onFiles,
 }: {
   images: ImageInput[]
   onChange: (images: ImageInput[]) => void
   notify: Notify
   disabled?: boolean
+  onFiles?: (files: File[]) => Promise<void>
 }) {
   const input = useRef<HTMLInputElement>(null)
   const imagesRef = useRef(images),
@@ -168,6 +170,7 @@ export function ImagePicker({
   }
   const append = async (files: File[]) => {
     if (disabled) return
+    if (onFiles) return onFiles(files)
     try {
       const additions = await readImages(files)
       if (!mounted.current) return
@@ -211,15 +214,21 @@ export function ImagePicker({
         <span className="upload-icon">
           <ImagePlus size={25} />
         </span>
-        <strong>选择、拖入或粘贴截图</strong>
-        <span>PNG / JPG / WebP · 最多 5 张，每张 10MB</span>
+        <strong>{onFiles ? '选择或拖入 PDF、图片，也可粘贴截图' : '选择、拖入或粘贴截图'}</strong>
+        <span>
+          {onFiles
+            ? 'PDF / PNG / JPG / WebP · 每个文件不超过 10MB'
+            : 'PNG / JPG / WebP · 最多 5 张，每张 10MB'}
+        </span>
       </Button>
       <Input
         ref={input}
         className="sr-only"
-        aria-label="上传截图文件"
+        aria-label={onFiles ? '上传简历 PDF 或图片' : '上传截图文件'}
         type="file"
-        accept="image/png,image/jpeg,image/webp"
+        accept={
+          onFiles ? '.pdf,application/pdf,image/png,image/jpeg,image/webp' : 'image/png,image/jpeg,image/webp'
+        }
         multiple
         disabled={disabled}
         onChange={(e) => {

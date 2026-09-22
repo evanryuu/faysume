@@ -75,7 +75,7 @@ test('resume ID, editor tab and mobile preview survive refresh and direct naviga
   await expect(page).toHaveURL(/preview=true/)
   await page.reload()
   await expect(page.getByRole('button', { name: '返回编辑', exact: true })).toBeVisible()
-  await expect(page.getByTestId('resume-paper')).toBeVisible()
+  await expect(page.getByTestId('preview-page').first()).toBeVisible()
   await page.goto(`${resumeUrl.pathname}?tab=invalid&preview=invalid`)
   await expect(page.getByLabel('姓名', { exact: true })).toHaveValue('路由测试用户')
   await expect(page.getByRole('button', { name: '查看预览', exact: true })).toBeVisible()

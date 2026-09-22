@@ -128,7 +128,7 @@ export async function exportBackup(): Promise<string> {
       db.materials.toArray(),
       db.sources.toArray(),
     ])
-    // Explicit allowlist: API settings and in-memory credentials are never included.
+    // Explicit allowlist: API settings and credentials are never included.
     return JSON.stringify({ version: 1, resumes, materials, sources }, null, 2)
   })
 }
