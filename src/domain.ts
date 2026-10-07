@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { appearanceSchema, defaultAppearance } from './appearance'
-import { reviewContext, workflowSchema } from './workflow'
+import { workflowSchema } from './workflow'
 import type {
   ExperienceAddition,
   ExperienceDraft,
@@ -361,8 +361,8 @@ export function applySuggestions(doc: ResumeDocument, ids: string[]): ResumeDocu
   const selected = ids.map((id) => {
     const suggestion = doc.suggestions.find((s) => s.id === id)
     if (!suggestion || suggestion.status !== 'pending') throw new Error('建议不存在或已处理')
-    if (suggestion.reviewContext && suggestion.reviewContext !== reviewContext(doc))
-      throw new Error('修改目标已变化，请重新确认方向并分析。')
+    // Context changes are advisory. Applying still requires confirmation and an
+    // unchanged target field, so unrelated edits cannot invalidate a reviewed suggestion.
     if (suggestion.requiresConfirmation && !suggestion.confirmed) throw new Error('请先确认建议中的新事实')
     if (readTarget(doc.content, suggestion.target) !== suggestion.before)
       throw new Error('字段已被修改，请重新分析后再应用建议')

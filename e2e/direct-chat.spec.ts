@@ -198,3 +198,57 @@ test('assistant replies have readable sections, lists and safe inline formatting
   await expect(reply).toContainText('<img src=x onerror=alert(1)>')
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
+
+for (const change of ['edit', 'delete', 'deselect'] as const) {
+  test(`confirmed suggestion remains applicable after reference material ${change}`, async ({ page }) => {
+    const id = await setup(page)
+    await page.evaluate(async (id) => {
+      const dbPath = '/src/db.ts',
+        workflowPath = '/src/workflow.ts'
+      const { db, mutateResume } = await import(/* @vite-ignore */ dbPath)
+      const { workflowFor } = await import(/* @vite-ignore */ workflowPath)
+      const now = new Date().toISOString()
+      await db.materials.add({
+        id: 'reference',
+        title: '项目经历',
+        content: '负责支付页面',
+        createdAt: now,
+        updatedAt: now,
+      })
+      await mutateResume(id, (doc: any) => ({
+        ...doc,
+        workflow: { ...workflowFor(doc), materialIds: ['reference'] },
+      }))
+    }, id)
+    await page.route(endpoint, (route) =>
+      route.fulfill({ json: completion('根据补充提出修改。', '负责支付页面开发') }),
+    )
+    await composer(page).fill('请调整个人简介')
+    await page.getByRole('button', { name: '发送给助手', exact: true }).click()
+    await page.getByRole('button', { name: '查看修改建议', exact: true }).click()
+    await page.getByLabel('我已核对，修改后的事实准确').check()
+    await page.evaluate(
+      async ({ id, change }) => {
+        const dbPath = '/src/db.ts'
+        const { db, mutateResume } = await import(/* @vite-ignore */ dbPath)
+        if (change === 'edit')
+          await db.materials.update('reference', {
+            title: '补充后的项目经历',
+            content: '负责支付页面和表单交互',
+          })
+        if (change === 'delete') await db.materials.delete('reference')
+        if (change === 'deselect')
+          await mutateResume(id, (doc: any) => ({ ...doc, workflow: { ...doc.workflow, materialIds: [] } }))
+      },
+      { id, change },
+    )
+    await expect(
+      page.getByText('参考素材或修改方向已更新。这是此前生成的建议，核对内容后仍可采纳。'),
+    ).toBeVisible()
+    await page.getByRole('button', { name: '采纳修改', exact: true }).click()
+    await expect(page.getByTestId('resume-paper')).toContainText('负责支付页面开发')
+    await page.getByRole('button', { name: '修改记录', exact: true }).click()
+    await page.getByRole('button', { name: '撤回', exact: true }).click()
+    await expect(page.getByTestId('resume-paper')).toContainText('参与前端开发')
+  })
+}

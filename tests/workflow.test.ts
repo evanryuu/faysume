@@ -55,7 +55,7 @@ describe('resume workflow', () => {
     m.content = '新事实'
     expect(() => requireConfirmedPlan(doc, [m])).toThrow()
   })
-  it('allows sequential confirmed suggestions but rejects a changed goal', () => {
+  it('allows reviewed suggestions after context changes while protecting manual field edits', () => {
     const doc = prepared()
     doc.suggestions = ['summary', 'headline'].map((field, i) => ({
       id: `s${i}`,
@@ -74,7 +74,13 @@ describe('resume workflow', () => {
     const first = applySuggestions(doc, ['s0'])
     expect(applySuggestions(first, ['s1']).content.headline).toBe('真实内容')
     first.workflow!.intent = '改为英文简历'
-    expect(() => applySuggestions(first, ['s1'])).toThrow('目标')
+    first.workflow!.materialIds = ['new-material']
+    expect(applySuggestions(first, ['s1']).content.headline).toBe('真实内容')
+    first.suggestions[1].confirmed = false
+    expect(() => applySuggestions(first, ['s1'])).toThrow('请先确认')
+    first.suggestions[1].confirmed = true
+    first.content.headline = '手动填写的新标题'
+    expect(() => applySuggestions(first, ['s1'])).toThrow('字段已被修改')
   })
   it('never accepts external research as personal evidence', async () => {
     const doc = prepared()
