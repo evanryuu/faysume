@@ -1,7 +1,16 @@
 import { z } from 'zod'
 import { appearanceSchema, defaultAppearance } from './appearance'
 import { reviewContext, workflowSchema } from './workflow'
-import type { ResumeContent, ResumeDocument, ResumeItem, ResumeSection, SectionKind, Target } from './types'
+import type {
+  ExperienceAddition,
+  ExperienceDraft,
+  ResumeContent,
+  ResumeDocument,
+  ResumeItem,
+  ResumeSection,
+  SectionKind,
+  Target,
+} from './types'
 
 export const uid = (): string => crypto.randomUUID()
 const text = z.string().max(200_000)
@@ -73,12 +82,29 @@ const historySchema = z
   .object({
     id,
     label: text,
-    changes: z.array(changeSchema).min(1).max(1000),
-    suggestionIds: z.array(id).min(1).max(1000),
+    changes: z.array(changeSchema).max(1000),
+    suggestionIds: z.array(id).max(1000),
     createdAt: timestamp,
     reverted: z.boolean(),
+    additions: z
+      .array(
+        z
+          .object({
+            sectionId: id,
+            items: z.array(itemSchema).min(1).max(30),
+            createdSection: z
+              .object({ title: text, kind: z.enum(['work', 'project']) })
+              .strict()
+              .optional(),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(30)
+      .optional(),
   })
   .strict()
+  .refine((entry) => entry.changes.length > 0 || Boolean(entry.additions?.length), '修改记录不能为空')
 export const documentSchema = z
   .object({
     id,
@@ -101,6 +127,18 @@ export const documentSchema = z
     createdAt: timestamp,
     updatedAt: timestamp,
     workflow: workflowSchema.optional(),
+    directConversation: z
+      .object({
+        messages: z
+          .array(
+            z
+              .object({ id, role: z.enum(['user', 'assistant']), text: z.string().min(1).max(60000) })
+              .strict(),
+          )
+          .max(200),
+      })
+      .strict()
+      .optional(),
     conversation: z
       .object({
         messages: z
@@ -139,6 +177,11 @@ export const documentSchema = z
       '历史 ID',
     )
     for (const entry of doc.history) {
+      unique(entry.additions?.map((addition) => addition.sectionId) ?? [], '新增经历区块 ID')
+      unique(
+        entry.additions?.flatMap((addition) => addition.items.map((item) => item.id)) ?? [],
+        '新增经历 ID',
+      )
       unique(entry.suggestionIds, '历史关联建议 ID')
       unique(
         entry.changes.map((c) => targetKey(c.target)),
@@ -250,6 +293,7 @@ export function cloneResume(doc: ResumeDocument, name = `${doc.name} · 副本`)
     ...copy,
     workflow: undefined,
     conversation: undefined,
+    directConversation: undefined,
     id: uid(),
     name,
     revision: 0,
@@ -343,14 +387,85 @@ export function applySuggestions(doc: ResumeDocument, ids: string[]): ResumeDocu
 export function revertHistory(doc: ResumeDocument, historyId: string): ResumeDocument {
   const entry = doc.history.find((h) => h.id === historyId)
   if (!entry || entry.reverted) throw new Error('修改记录不存在或已撤回')
+  for (const addition of entry.additions ?? []) {
+    const section = doc.content.sections.find((s) => s.id === addition.sectionId)
+    for (const item of addition.items) {
+      const current = section?.items.find((i) => i.id === item.id)
+      if (
+        !current ||
+        current.layout !== item.layout ||
+        itemFields.some((field) => current[field] !== item[field])
+      )
+        throw new Error('新增经历已有后续修改或已删除，无法撤回；你的新内容已保留。')
+    }
+  }
   for (const change of entry.changes) {
     if (readTarget(doc.content, change.target) !== change.after)
       throw new Error('字段有后续修改，无法撤回整组建议')
   }
   const copy = structuredClone(doc)
+  for (const addition of entry.additions ?? []) {
+    const section = copy.content.sections.find((s) => s.id === addition.sectionId)!
+    const ids = new Set(addition.items.map((item) => item.id))
+    section.items = section.items.filter((item) => !ids.has(item.id))
+    if (
+      addition.createdSection &&
+      !section.items.length &&
+      section.title === addition.createdSection.title &&
+      section.kind === addition.createdSection.kind
+    )
+      copy.content.sections = copy.content.sections.filter((s) => s.id !== section.id)
+  }
   for (const change of entry.changes) copy.content = writeTarget(copy.content, change.target, change.before)
   copy.history.find((h) => h.id === historyId)!.reverted = true
   for (const suggestion of copy.suggestions)
     if (entry.suggestionIds.includes(suggestion.id)) suggestion.status = 'pending'
   return copy
+}
+
+export function appendExperiences(doc: ResumeDocument, entries: ExperienceDraft[]): ResumeDocument {
+  if (!entries.length || entries.length > 30) throw new Error('每次可添加 1–30 段经历。')
+  const copy = structuredClone(doc)
+  const additions: ExperienceAddition[] = []
+  const newSections = new Map<ExperienceDraft['kind'], ResumeSection>()
+  const knownIds = new Set(copy.content.sections.flatMap((s) => [s.id, ...s.items.map((i) => i.id)]))
+  for (const entry of entries) {
+    if (entry.kind !== 'work' && entry.kind !== 'project') throw new Error('请选择工作或项目经历。')
+    const item = itemSchema.parse(entry.item)
+    if (![item.title, item.organization, item.description].some((value) => value.trim()))
+      throw new Error('请补充经历标题、公司或描述。')
+    if (knownIds.has(item.id)) throw new Error('这段经历已经添加，请勿重复提交。')
+    knownIds.add(item.id)
+    let section = entry.sectionId
+      ? copy.content.sections.find((s) => s.id === entry.sectionId)
+      : newSections.get(entry.kind)
+    if (entry.sectionId && (!section || section.kind !== entry.kind))
+      throw new Error('目标区块已删除或类型已变化，请重新选择添加位置。')
+    let createdSection: ExperienceAddition['createdSection']
+    if (!section) {
+      section = createSection(entry.kind)
+      copy.content.sections.push(section)
+      newSections.set(entry.kind, section)
+      createdSection = { title: section.title, kind: entry.kind }
+    }
+    section.items.push(item)
+    const addition = additions.find((a) => a.sectionId === section.id)
+    if (addition) addition.items.push(structuredClone(item))
+    else
+      additions.push({
+        sectionId: section.id,
+        items: [structuredClone(item)],
+        ...(createdSection ? { createdSection } : {}),
+      })
+  }
+  copy.history.push({
+    id: uid(),
+    label: `AI 添加 ${entries.length} 段经历`,
+    changes: [],
+    suggestionIds: [],
+    additions,
+    createdAt: new Date().toISOString(),
+    reverted: false,
+  })
+  return documentSchema.parse(copy)
 }

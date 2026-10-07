@@ -51,6 +51,17 @@ export interface Change {
   before: string
   after: string
 }
+export interface ExperienceDraft {
+  kind: 'work' | 'project'
+  item: ResumeItem
+  /** Omitted when adding to a new section. */
+  sectionId?: string
+}
+export interface ExperienceAddition {
+  sectionId: string
+  items: ResumeItem[]
+  createdSection?: { title: string; kind: 'work' | 'project' }
+}
 export interface HistoryEntry {
   id: string
   label: string
@@ -58,6 +69,7 @@ export interface HistoryEntry {
   suggestionIds: string[]
   createdAt: string
   reverted: boolean
+  additions?: ExperienceAddition[]
 }
 export type Template = 'classic' | 'modern' | 'compact'
 export interface ResumeAppearance {
@@ -67,6 +79,11 @@ export interface ResumeAppearance {
   lineHeight: number
   spacing: 'compact' | 'standard' | 'relaxed'
   margin: number
+}
+export interface DirectChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
 }
 export interface ResumeDocument {
   id: string
@@ -90,6 +107,7 @@ export interface ResumeDocument {
   updatedAt: string
   workflow?: import('./workflow').Workflow
   conversation?: { messages: import('./chat').ResumeChatMessage[]; snapshot: string; handledCalls: string[] }
+  directConversation?: { messages: DirectChatMessage[] }
 }
 export interface Material {
   id: string

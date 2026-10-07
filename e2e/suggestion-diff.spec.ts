@@ -42,6 +42,7 @@ test('retained wording stays neutral in Chinese summaries and multiline skill ed
     return resume.id
   }, examples)
   await page.goto(`/resumes/${id}?tab=ai`)
+  await page.getByRole('tab', { name: /修改建议/ }).click()
   const diffs = page.getByRole('group', { name: '修改对比' })
   await expect(diffs).toHaveCount(2)
   await expect(diffs.nth(0).locator('del')).toHaveText('数')

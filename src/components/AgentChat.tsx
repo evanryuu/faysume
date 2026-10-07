@@ -1,3 +1,4 @@
+import AssistantMessage from './AssistantMessage'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -6,6 +7,7 @@ import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalRespons
 import { db, mutateResume } from '../db'
 import { revisionOutputSchema, type ResumeChatMessage } from '../chat'
 import { workflowFor, workflowSnapshot } from '../workflow'
+import { assistantText } from '../directChat'
 import type { AIConnection, Material, ResumeDocument } from '../types'
 import { errorMessage, type Notify } from './ui'
 
@@ -14,11 +16,21 @@ export default function AgentChat({
   materials,
   connection,
   notify,
+  pendingCount,
+  onReview,
+  discussion,
+  onDiscussionUsed,
+  active,
 }: {
   document: ResumeDocument
   materials: Material[]
   connection: AIConnection
   notify: Notify
+  pendingCount: number
+  onReview: () => void
+  discussion: { text: string } | null
+  onDiscussionUsed: () => void
+  active: boolean
 }) {
   const [input, setInput] = useState('')
   const [saving, setSaving] = useState(false)
@@ -26,6 +38,9 @@ export default function AgentChat({
   access.current = connection.accessToken
   const requestSnapshot = useRef('')
   const mounted = useRef(true)
+  const scroll = useRef<HTMLDivElement>(null)
+  const composer = useRef<HTMLTextAreaElement>(null)
+  const latest = useRef<HTMLElement>(null)
   const transport = useMemo(
     () =>
       new DefaultChatTransport<ResumeChatMessage>({
@@ -36,14 +51,6 @@ export default function AgentChat({
           if (!current) throw new Error('简历已被删除。')
           const selected = await db.materials.bulkGet(workflowFor(current).materialIds)
           if (selected.some((m) => !m)) throw new Error('选中素材已被删除，请重新选择。')
-          if (messages.at(-1)?.role === 'user') {
-            await mutateResume(document.id, (doc) => ({
-              ...doc,
-              suggestions: doc.suggestions.map((s) =>
-                s.status === 'pending' ? { ...s, status: 'dismissed' } : s,
-              ),
-            }))
-          }
           requestSnapshot.current = workflowSnapshot(current, selected as Material[])
           return {
             body: {
@@ -51,7 +58,13 @@ export default function AgentChat({
               trigger,
               messageId,
               messages,
-              document: { ...current, conversation: undefined, history: [], suggestions: [] },
+              document: {
+                ...current,
+                conversation: undefined,
+                directConversation: undefined,
+                history: [],
+                suggestions: [],
+              },
               materials: selected,
             },
           }
@@ -70,7 +83,25 @@ export default function AgentChat({
   const { messages, setMessages, sendMessage, addToolApprovalResponse, status, error, stop, clearError } =
     useChat<ResumeChatMessage>({
       id: document.id,
-      messages: document.conversation?.messages ?? [],
+      messages:
+        document.conversation?.messages ??
+        (assistantText({ summary: document.analysisSummary, questions: document.analysisQuestions })
+          ? [
+              {
+                id: `legacy-${document.id}`,
+                role: 'assistant',
+                parts: [
+                  {
+                    type: 'text',
+                    text: assistantText({
+                      summary: document.analysisSummary,
+                      questions: document.analysisQuestions,
+                    }),
+                  },
+                ],
+              },
+            ]
+          : []),
       transport,
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
       onFinish: async ({ message, messages, isAbort, isError }) => {
@@ -130,7 +161,17 @@ export default function AgentChat({
       void stop()
     }
   }, [stop])
+  useEffect(() => {
+    if (discussion) {
+      setInput((current) => [discussion.text, current].filter(Boolean).join('\n\n'))
+      composer.current?.focus()
+      onDiscussionUsed()
+    }
+  }, [discussion])
   const busy = status === 'submitted' || status === 'streaming' || saving
+  useEffect(() => {
+    if (active && scroll.current && latest.current) scroll.current.scrollTop = latest.current.offsetTop
+  }, [messages.length, status, active])
   const stale = Boolean(
     document.conversation && document.conversation.snapshot !== workflowSnapshot(document, materials),
   )
@@ -148,21 +189,31 @@ export default function AgentChat({
     }
   }
   return (
-    <section className="agent-chat" aria-label="简历对话助手">
-      <h3>先聊聊，你希望怎样调整？</h3>
-      <p className="hint">
-        助手会了解目标、追问细节，再请你确认修改方向和搜索关键词。生成建议后，你仍可逐条审阅。
-      </p>
-      {stale && (
-        <p className="notice warning">简历、岗位或素材已经变化。请按当前内容重新开始，旧方案不能继续执行。</p>
-      )}
-      <div className="agent-messages" aria-live="polite">
+    <section className="agent-chat conversation-chat" aria-label="简历对话助手">
+      <div className="agent-messages" aria-live="polite" ref={scroll}>
+        {!messages.length && (
+          <div className="chat-welcome">
+            <h3>先聊聊，你希望怎样调整？</h3>
+            <p>助手会了解目标、追问细节，再请你确认修改方向。生成建议后可以继续聊。</p>
+          </div>
+        )}
+        {stale && (
+          <p className="notice warning">
+            当前简历、岗位或素材已更新。下一条消息会使用最新内容，旧的修改方向需重新确认。
+          </p>
+        )}
         {messages.map((message) => (
-          <article key={message.id} className={`agent-message ${message.role}`}>
+          <article
+            key={message.id}
+            className={`agent-message ${message.role}`}
+            ref={message === messages.at(-1) ? latest : undefined}
+          >
             <strong>{message.role === 'user' ? '你' : '简历助手'}</strong>
             {message.parts.map((part, index) => {
               if (part.type === 'text')
-                return (
+                return message.role === 'assistant' ? (
+                  <AssistantMessage key={index} text={part.text} />
+                ) : (
                   <p className="agent-text" key={index}>
                     {part.text}
                   </p>
@@ -232,7 +283,7 @@ export default function AgentChat({
                         size="default"
                         type="button"
                         className="button secondary"
-                        disabled={busy || stale || message !== messages.at(-1)}
+                        disabled={busy || message !== messages.at(-1)}
                         onClick={() =>
                           void addToolApprovalResponse({
                             id: part.approval.id,
@@ -250,12 +301,28 @@ export default function AgentChat({
                   {part.state === 'output-error' && (
                     <p role="alert">{part.errorText || '生成建议失败，请重试。'}</p>
                   )}
-                  {part.state === 'output-available' && <p>建议已生成，请在下方审阅。未自动修改简历。</p>}
+                  {part.state === 'output-available' && (
+                    <>
+                      <AssistantMessage text={assistantText(part.output)} />
+                      <p>建议已生成，可前往「修改建议」审阅，也可以继续补充或调整。</p>
+                    </>
+                  )}
                 </div>
               )
             })}
           </article>
         ))}
+        {pendingCount > 0 && (
+          <div className="chat-result-link">
+            <div>
+              <strong>{pendingCount} 条修改建议待审阅</strong>
+              <p>确认采纳后才会更新简历。</p>
+            </div>
+            <Button variant="outline" className="button secondary" onClick={onReview}>
+              查看修改建议
+            </Button>
+          </div>
+        )}
       </div>
       {error && (
         <p role="alert" className="notice warning">
@@ -263,9 +330,10 @@ export default function AgentChat({
         </p>
       )}
       <form
+        className="chat-composer"
         onSubmit={(e) => {
           e.preventDefault()
-          if (!input.trim() || busy || stale || pending) return
+          if (!input.trim() || busy || pending) return
           void sendMessage({ text: input.trim() }).catch((e) => notify(errorMessage(e), 'error'))
           setInput('')
         }}
@@ -273,11 +341,12 @@ export default function AgentChat({
         <label className="field">
           <span>你的目标或补充说明</span>
           <Textarea
+            ref={composer}
             rows={3}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={busy}
-            placeholder="例如：我想申请高级前端岗位，突出性能优化，保留技术细节。没有依据的数据不要补。"
+            placeholder="告诉助手你想修改什么，或补充真实经历…"
           />
         </label>
         <div className="agent-actions">
@@ -287,12 +356,7 @@ export default function AgentChat({
             className="button primary"
             type="submit"
             disabled={
-              !input.trim() ||
-              busy ||
-              pending ||
-              stale ||
-              !connection.accessToken ||
-              !document.extractionReviewed
+              !input.trim() || busy || pending || !connection.accessToken || !document.extractionReviewed
             }
           >
             发送给助手
