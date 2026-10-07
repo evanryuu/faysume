@@ -83,7 +83,7 @@ export default function Settings({
             onChange={(e) => update({ mode: e.target.value as 'server' | 'direct' })}
           >
             <NativeSelectOption value="server">站点 AI 服务（支持对话助手）</NativeSelectOption>
-            <NativeSelectOption value="direct">浏览器直连（原有基础分析）</NativeSelectOption>
+            <NativeSelectOption value="direct">浏览器直连（支持连续对话）</NativeSelectOption>
           </NativeSelect>
         </label>
         {connection.mode === 'server' ? (

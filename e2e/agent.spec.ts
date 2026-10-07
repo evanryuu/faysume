@@ -18,7 +18,13 @@ test('SDK chat: clarify, persist approval, search, review, apply and undo', asyn
     doStream: async ({ prompt }) => {
       const snapshot = JSON.stringify(prompt).match(/当前快照标识：([a-f0-9]{64})/)![1]
       const n = ++streams
-      const text = n === 1 ? '你具体负责了哪些页面？' : '建议已生成，请在下方审阅。'
+      if (n > 3) expect(JSON.stringify(prompt)).toContain('负责支付表单交互开发')
+      const text =
+        n === 1
+          ? '你具体负责了哪些页面？'
+          : n > 3
+            ? '可以继续，已经基于最新简历回答。'
+            : '建议已生成，请前往修改建议审阅。'
       const chunks: LanguageModelV4StreamPart[] =
         n === 2
           ? [
@@ -123,7 +129,7 @@ test('SDK chat: clarify, persist approval, search, review, apply and undo', asyn
   await page.goto('/')
   await settings()
   await page.getByRole('button', { name: '空白创建', exact: true }).click()
-  await page.getByRole('button', { name: 'AI 建议', exact: true }).click()
+  await page.getByRole('button', { name: 'AI 助手', exact: true }).click()
   await page.getByLabel('你的目标或补充说明').fill('我想突出前端经验')
   await page.getByRole('button', { name: '发送给助手' }).click()
   await expect(page.getByText('你具体负责了哪些页面？', { exact: true })).toBeVisible()
@@ -142,9 +148,10 @@ test('SDK chat: clarify, persist approval, search, review, apply and undo', asyn
   await page.getByLabel('站点访问口令').fill('test-site-token')
   await page.getByRole('button', { name: /我的简历/ }).click()
   await page.getByRole('button', { name: '打开 未命名简历', exact: true }).click()
-  await page.getByRole('button', { name: 'AI 建议', exact: true }).click()
+  await page.getByRole('button', { name: 'AI 助手', exact: true }).click()
   await expect(page.getByText('你具体负责了哪些页面？', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '确认方向，生成建议' }).click()
+  await page.getByRole('button', { name: '查看修改建议', exact: true }).click()
   await expect(page.getByRole('button', { name: '采纳修改', exact: true })).toBeDisabled()
   await expect(page.getByText('负责支付表单交互开发', { exact: true })).toBeVisible()
   expect(searches).toBe(1)
@@ -159,18 +166,27 @@ test('SDK chat: clarify, persist approval, search, review, apply and undo', asyn
   await page.getByLabel('我已核对，修改后的事实准确').check()
   await page.getByRole('button', { name: '采纳修改', exact: true }).click()
   await expect(page.getByTestId('resume-paper')).toContainText('负责支付表单交互开发')
+  await page.getByRole('tab', { name: '对话', exact: true }).click()
+  await page.getByRole('textbox', { name: '你的目标或补充说明', exact: true }).fill('还能怎样评估效果？')
+  await page.getByRole('button', { name: '发送给助手' }).click()
+  await expect(page.getByText('可以继续，已经基于最新简历回答。', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: '修改记录', exact: true }).click()
   await page.getByRole('button', { name: '撤回', exact: true }).click()
   await expect(page.getByTestId('resume-paper')).not.toContainText('负责支付表单交互开发')
-  await page.getByRole('button', { name: /^AI 建议/ }).click()
+  await page.getByRole('button', { name: /^AI 助手/ }).click()
+  await page.getByRole('tab', { name: /修改建议/ }).click()
   await expect(page.getByRole('button', { name: '采纳修改', exact: true })).toHaveCount(1)
   expect(searches).toBe(1)
   expect(revisions).toBe(1)
+  await page.getByRole('button', { name: '设置修改方向', exact: true }).click()
   await page.getByLabel('目标岗位', { exact: true }).fill('后端工程师')
   await page.getByLabel('目标岗位', { exact: true }).blur()
+  await page.getByRole('button', { name: '完成', exact: true }).click()
+  await page.getByRole('tab', { name: '对话', exact: true }).click()
   await expect(
-    page.getByText('简历、岗位或素材已经变化。请按当前内容重新开始，旧方案不能继续执行。'),
+    page.getByText('当前简历、岗位或素材已更新。下一条消息会使用最新内容，旧的修改方向需重新确认。'),
   ).toBeVisible()
+  await page.getByRole('tab', { name: /修改建议/ }).click()
   await page.getByRole('button', { name: '采纳修改', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('目标已变化')
   await page.setViewportSize({ width: 390, height: 844 })

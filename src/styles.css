@@ -1403,6 +1403,49 @@ select {
 .panel-heading > .soft-icon {
   margin-bottom: 15px;
 }
+.content-heading-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.content-heading-row h2 {
+  margin: 0;
+}
+.experience-trigger {
+  flex-shrink: 0;
+}
+.experience-intro {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.experience-input-hint {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.experience-source {
+  min-height: 180px;
+}
+.experience-review {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.experience-dialog .notice {
+  margin-bottom: 18px;
+  overflow-wrap: anywhere;
+}
+.experience-dialog .item-label strong {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
 .editor-section {
   border-bottom: 1px solid var(--line);
   padding-bottom: 20px;
@@ -2545,6 +2588,256 @@ select {
   gap: 10px;
   flex-wrap: wrap;
 }
+.ai-editor-scroll {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 16px;
+}
+/* Conversation and review are separate views; settings explain their shared context. */
+.ai-workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+.ai-workspace-header h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.ai-workspace-header p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.ai-workspace-header > button {
+  flex-shrink: 0;
+}
+.ai-context-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  background: var(--soft);
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.ai-context-summary > span {
+  color: var(--muted);
+}
+.ai-context-summary strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.ai-context-summary small {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 11px;
+}
+.ai-view-tabs {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+.ai-view-tabs button {
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  padding: 10px 12px;
+  color: var(--muted);
+}
+.ai-view-tabs button:hover {
+  background: var(--soft);
+}
+.ai-view-tabs button[aria-selected='true'] {
+  border-bottom-color: var(--green);
+  color: var(--green);
+}
+.ai-view-tabs button span {
+  background: var(--soft);
+  padding: 1px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+}
+.ai-chat-panel {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.ai-review-panel {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ai-chat-panel[hidden],
+.ai-review-panel[hidden] {
+  display: none;
+}
+.review-intro {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.ai-review-panel .suggestion-heading {
+  margin-top: 0;
+}
+.ai-review-panel .suggestion-actions {
+  flex-wrap: wrap;
+}
+.ai-review-panel .suggestion-actions > button:first-child {
+  margin-right: auto;
+}
+.chat-result-link {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.chat-result-link > div {
+  flex: 1;
+}
+.chat-result-link strong {
+  font-size: 13px;
+}
+.chat-result-link p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.context-materials {
+  margin: 18px 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.context-materials h3 {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+}
+.conversation-chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.conversation-chat .agent-messages {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  padding: 0 4px 12px 0;
+  overscroll-behavior: contain;
+}
+.conversation-chat .agent-message {
+  border: 1px solid var(--line);
+  margin: 0 0 16px;
+  font-size: 13px;
+}
+.conversation-chat .agent-message.user {
+  margin-left: 28px;
+  border-color: transparent;
+}
+.conversation-chat .agent-message > strong {
+  font-size: 11px;
+  color: var(--muted);
+}
+.agent-text {
+  margin-bottom: 0;
+}
+.chat-welcome {
+  padding: 30px 10px;
+  color: var(--green);
+  line-height: 1.8;
+}
+.chat-welcome p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.chat-thinking {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+.chat-composer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  background: #fff;
+}
+.chat-composer textarea {
+  width: 100%;
+  min-height: 82px;
+  max-height: 22vh;
+  overflow: auto;
+}
+.chat-composer-actions,
+.chat-retry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.chat-retry {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.chat-composer .notice {
+  max-height: 90px;
+  overflow: auto;
+  margin: 0 0 8px;
+}
+@media (max-width: 760px) {
+  .ai-editor-scroll {
+    padding: 16px 16px 76px;
+  }
+  .ai-workspace-header h2 {
+    font-size: 15px;
+  }
+  .ai-workspace-header p {
+    display: none;
+  }
+  .ai-workspace-header {
+    margin-bottom: 12px;
+  }
+  .ai-workspace-header > button {
+    padding: 8px;
+    font-size: 11px;
+  }
+  .ai-context-summary {
+    margin-bottom: 8px;
+    padding: 10px;
+    font-size: 11px;
+  }
+  .ai-view-tabs {
+    margin-bottom: 12px;
+  }
+  .chat-composer-actions > .hint {
+    font-size: 10px;
+  }
+}
 .research-source {
   padding: 12px 0;
   overflow-wrap: anywhere;
@@ -3111,5 +3404,66 @@ select {
     width: 100%;
     min-height: 0;
     padding: 0;
+  }
+}
+
+/* Reading rhythm for assistant replies, independent of the resume typography. */
+.conversation-chat .agent-message.assistant {
+  padding: 22px 24px;
+}
+.assistant-content {
+  margin-top: 14px;
+  font-size: 14px;
+  line-height: 1.95;
+  overflow-wrap: anywhere;
+  color: #35443e;
+}
+.assistant-content p {
+  margin: 0 0 18px;
+  line-height: inherit;
+  white-space: pre-wrap;
+}
+.assistant-content h4 {
+  margin: 26px 0 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 600;
+  color: var(--green);
+}
+.assistant-content h4:first-child {
+  margin-top: 0;
+}
+.assistant-content ul,
+.assistant-content ol {
+  margin: 12px 0 20px;
+  padding-left: 23px;
+}
+.assistant-content li {
+  padding-left: 4px;
+  margin: 0 0 12px;
+}
+.assistant-content li::marker {
+  color: #71877b;
+}
+.assistant-content strong {
+  font-weight: 600;
+  color: var(--green);
+}
+.assistant-content code {
+  font-size: 0.9em;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--soft);
+}
+.assistant-content > :last-child {
+  margin-bottom: 0;
+}
+@media (max-width: 760px) {
+  .conversation-chat .agent-message.assistant {
+    padding: 18px;
+  }
+  .assistant-content {
+    font-size: 14px;
+    line-height: 1.9;
   }
 }

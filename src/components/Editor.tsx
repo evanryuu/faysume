@@ -1,8 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { NativeSelectOption, NativeSelect } from '@/components/ui/native-select'
-import { Textarea } from '@/components/ui/textarea'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   ArrowLeft,
@@ -31,20 +30,20 @@ import {
   readTarget,
   revertHistory,
   targetLabel,
-  uid,
   writeTarget,
 } from '../domain'
-import { analyzeResume, connectionReady } from '../ai'
 import { materialSnapshot, reviewContext, workflowFor } from '../workflow'
 import AgentChat from './AgentChat'
 import AppearancePanel from './AppearancePanel'
 import { defaultAppearance, resolveAppearance } from '../appearance'
+import DirectChat from './DirectChat'
 import SuggestionDiff from './SuggestionDiff'
 import type { AIConnection, ProfileField, ResumeDocument, SectionKind, Target, Template } from '../types'
 import PaginatedPreview from './PaginatedPreview'
 import ResumeItemEditor from './ResumeItemEditor'
 import JobDialog from './JobDialog'
-import { Busy, Field, Modal, errorMessage, type Notify } from './ui'
+import AddExperienceDialog from './AddExperienceDialog'
+import { Field, Modal, errorMessage, type Notify } from './ui'
 
 import type { EditorTab } from '../navigation'
 export default function Editor({
@@ -72,10 +71,12 @@ export default function Editor({
 }) {
   const [jobOpen, setJobOpen] = useState(false),
     [appearanceOpen, setAppearanceOpen] = useState(false),
-    [busy, setBusy] = useState(false),
+    [experienceOpen, setExperienceOpen] = useState(false),
+    [aiView, setAiView] = useState<'chat' | 'review'>('chat'),
+    [contextOpen, setContextOpen] = useState(false),
+    [discussion, setDiscussion] = useState<{ text: string } | null>(null),
     [adding, setAdding] = useState<SectionKind>('work'),
-    [deleting, setDeleting] = useState<{ sectionId: string; itemId?: string } | null>(null),
-    [answer, setAnswer] = useState('')
+    [deleting, setDeleting] = useState<{ sectionId: string; itemId?: string } | null>(null)
   const materials = useLiveQuery(() => db.materials.orderBy('updatedAt').reverse().toArray(), [], [])
   const selectedMaterials = workflowFor(document).materialIds
   const setSelectedMaterials = (ids: string[]) =>
@@ -88,8 +89,6 @@ export default function Editor({
     [document.id, document.sourceIds.join(',')],
     [],
   )
-  const controller = useRef<AbortController | null>(null)
-  useEffect(() => () => controller.current?.abort(), [document.id])
   const change = async (mutate: (doc: ResumeDocument) => ResumeDocument) => {
     try {
       await mutateResume(document.id, mutate)
@@ -125,53 +124,6 @@ export default function Editor({
       notify('已创建独立副本。')
     } catch (e) {
       notify(errorMessage(e), 'error')
-    }
-  }
-  const analyze = async () => {
-    if (!connectionReady(connection)) {
-      notify('请先配置 AI 连接。', 'error')
-      onSettings()
-      return
-    }
-    setBusy(true)
-    controller.current = new AbortController()
-    const signal = controller.current.signal
-    try {
-      const snapshot = await db.resumes.get(document.id)
-      if (!snapshot) throw new Error('简历不存在。')
-      if (!snapshot.extractionReviewed) throw new Error('请先在「识别原稿」中确认已校对内容。')
-      const result = await analyzeResume(
-        connection,
-        { ...snapshot, workflow: undefined },
-        materials.filter((m) => selectedMaterials.includes(m.id)),
-        signal,
-      )
-      signal.throwIfAborted()
-      await mutateResume(snapshot.id, (current) => {
-        if (
-          current.locale !== snapshot.locale ||
-          current.market !== snapshot.market ||
-          current.targetRole !== snapshot.targetRole ||
-          current.jobDescription !== snapshot.jobDescription
-        )
-          throw new Error('分析期间岗位或语言设置已变化，请重新分析。')
-        return {
-          ...current,
-          analysisSummary: result.summary,
-          analysisQuestions: result.questions,
-          suggestions: [
-            ...current.suggestions.map((s) =>
-              s.status === 'pending' ? { ...s, status: 'dismissed' as const } : s,
-            ),
-            ...result.suggestions,
-          ],
-        }
-      })
-      notify(`分析完成，生成 ${result.suggestions.length} 条可审阅建议。`)
-    } catch (e) {
-      if (!signal.aborted) notify(errorMessage(e), 'error')
-    } finally {
-      setBusy(false)
     }
   }
   const pending = document.suggestions.filter((s) => s.status === 'pending')
@@ -217,26 +169,125 @@ export default function Editor({
       doc.content.sections.push(section)
       return doc
     })
-  const saveAnswer = async () => {
-    try {
-      const now = new Date().toISOString()
-      await db.materials.add({
-        id: uid(),
-        title: `${document.name} · 亮点补充`,
-        content: answer,
-        createdAt: now,
-        updatedAt: now,
-      })
-      setAnswer('')
-      notify('已保存到经历素材库，请勾选该素材后重新分析。')
-    } catch (e) {
-      notify(errorMessage(e), 'error')
-    }
-  }
   const print = async () => {
     await db.resumes.get(document.id)
     requestAnimationFrame(() => requestAnimationFrame(() => window.print()))
   }
+  const review = (
+    <>
+      {document.workflow?.research && document.workflow.research.length > 0 && (
+        <details className="material-select">
+          <summary>本轮参考的外部资料（{document.workflow.research.length}）</summary>
+          <p className="hint">
+            外部资料用于写法和岗位参考，不是个人经历的证据。未标明发布日期的资料不能证明是最新发布。
+          </p>
+          {document.workflow.research.map((source) => (
+            <article key={source.id} className="research-source">
+              <a href={source.url} target="_blank" rel="noreferrer">
+                {source.title}
+              </a>
+              <small>
+                发布日期：{source.publishedAt || '未提供'} · 检索日期：
+                {source.retrievedAt.slice(0, 10)}
+              </small>
+              <p>{source.content}</p>
+            </article>
+          ))}
+        </details>
+      )}
+      {pending.length > 0 && (
+        <div className="suggestion-heading">
+          <h3>{pending.length} 条待审阅建议</h3>
+          <Button
+            variant="ghost"
+            size="layout"
+            type="button"
+            className="text-button"
+            disabled={!pending.some((s) => s.confirmed)}
+            onClick={() => void apply(pending.filter((s) => s.confirmed).map((s) => s.id))}
+          >
+            应用所有已确认建议
+          </Button>
+        </div>
+      )}
+      {pending.map((suggestion) => (
+        <article className="suggestion" key={suggestion.id}>
+          <span className="eyebrow">{targetLabel(document.content, suggestion.target)}</span>
+          <p className="suggestion-reason">{suggestion.reason}</p>
+          <SuggestionDiff before={suggestion.before} after={suggestion.after} />
+          <p className="hint">参考来源：{suggestion.evidence.join('、')}</p>
+          {suggestion.reviewContext === reviewContext(document) &&
+            suggestion.references?.map((id) => {
+              const source = document.workflow?.research.find((s) => s.id === id)
+              return source ? (
+                <p className="hint" key={id}>
+                  外部参考：
+                  <a href={source.url} target="_blank" rel="noreferrer">
+                    {source.title}
+                  </a>
+                </p>
+              ) : null
+            })}
+          {suggestion.question && <div className="notice warning">{suggestion.question}</div>}
+          <label className="check-row">
+            <Checkbox
+              key={`${suggestion.id}-${suggestion.confirmed}`}
+              defaultChecked={suggestion.confirmed}
+              onCheckedChange={(checked) => {
+                const confirmed = checked === true
+                void change((doc) => ({
+                  ...doc,
+                  suggestions: doc.suggestions.map((s) => (s.id === suggestion.id ? { ...s, confirmed } : s)),
+                }))
+              }}
+            />
+            <span>我已核对，修改后的事实准确</span>
+          </label>
+          <div className="suggestion-actions">
+            <Button
+              variant="ghost"
+              className="text-button"
+              onClick={() => {
+                setDiscussion({
+                  text: `关于「${targetLabel(document.content, suggestion.target)}」的建议“${suggestion.after.slice(0, 300)}”，我想调整：`,
+                })
+                setAiView('chat')
+              }}
+            >
+              和助手讨论
+            </Button>
+            <Button
+              variant="ghost"
+              size="layout"
+              type="button"
+              className="text-button muted"
+              onClick={() =>
+                void change((doc) => ({
+                  ...doc,
+                  suggestions: doc.suggestions.map((s) =>
+                    s.id === suggestion.id ? { ...s, status: 'dismissed' } : s,
+                  ),
+                }))
+              }
+            >
+              忽略
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              type="button"
+              className="button primary small"
+              disabled={!suggestion.confirmed}
+              onClick={() => void apply([suggestion.id])}
+            >
+              <Check size={15} />
+              采纳修改
+            </Button>
+          </div>
+        </article>
+      ))}
+    </>
+  )
   const profileLabels: [ProfileField, string][] = [
     ['name', '姓名'],
     ['headline', '职业标题'],
@@ -325,7 +376,7 @@ export default function Editor({
             {(
               [
                 ['content', '内容', SlidersHorizontal],
-                ['ai', 'AI 建议', Sparkles],
+                ['ai', 'AI 助手', Sparkles],
                 ['sources', '识别原稿', ScanText],
                 ['history', '修改记录', History],
               ] as const
@@ -344,11 +395,23 @@ export default function Editor({
               </Button>
             ))}
           </div>
-          <div className="editor-scroll">
+          <div className={`editor-scroll ${tab === 'ai' ? 'ai-editor-scroll' : ''}`}>
             {tab === 'content' && (
               <>
-                <div className="panel-heading">
-                  <h2>你的经历，你来定义</h2>
+                <div className="panel-heading content-panel-heading">
+                  <div className="content-heading-row">
+                    <h2>你的经历，你来定义</h2>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="button subtle experience-trigger"
+                      onClick={() => setExperienceOpen(true)}
+                      title="粘贴工作或项目经历，AI 识别后添加"
+                    >
+                      <Sparkles size={16} />
+                      AI 添加经历
+                    </Button>
+                  </div>
                   <p>按需添加自由文本或经历条目，区块标题和顺序都可调整。</p>
                   <p>个人简介和正文支持 Markdown：**粗体**、- 列表、[文字](链接)。</p>
                 </div>
@@ -491,236 +554,126 @@ export default function Editor({
             )}
             {tab === 'ai' && (
               <>
-                <div className="panel-heading">
-                  <span className="soft-icon">
-                    <Sparkles size={23} />
-                  </span>
-                  <h2>发现值得被看见的亮点</h2>
-                  <p>提供理由、对照原文，由你决定如何修改。</p>
-                </div>
-                <div className="field-grid">
-                  <Field
-                    label="目标岗位"
-                    value={document.targetRole}
-                    onCommit={(value, before) => writeMetadata('targetRole', value, before)}
-                  />
-                  <Field
-                    label="招聘市场"
-                    value={document.market}
-                    placeholder="例如：中国、新加坡"
-                    onCommit={(value, before) => writeMetadata('market', value, before)}
-                  />
-                  <label className="field">
-                    <span>目标简历语言</span>
-                    <NativeSelect
-                      value={document.locale}
-                      onChange={(e) => {
-                        const locale = e.currentTarget.value
-                        void change((doc) => ({ ...doc, locale }))
-                      }}
-                    >
-                      <NativeSelectOption value="zh-CN">简体中文</NativeSelectOption>
-                      <NativeSelectOption value="en">English</NativeSelectOption>
-                      <NativeSelectOption value="ja">日本語</NativeSelectOption>
-                    </NativeSelect>
-                  </label>
-                </div>
-                <Field
-                  label="岗位描述（可选）"
-                  value={document.jobDescription}
-                  onCommit={(value, before) => writeMetadata('jobDescription', value, before)}
-                  multiline
-                />
-                {materials.length > 0 && (
-                  <details className="material-select">
-                    <summary>
-                      <BookOpen size={15} />
-                      选择参考素材（已选 {selectedMaterials.length}）
-                    </summary>
-                    {materials.map((material) => (
-                      <label className="check-row" key={material.id}>
-                        <Checkbox
-                          checked={selectedMaterials.includes(material.id)}
-                          onCheckedChange={(checked) =>
-                            setSelectedMaterials(
-                              checked === true
-                                ? [...selectedMaterials, material.id]
-                                : selectedMaterials.filter((id) => id !== material.id),
-                            )
-                          }
-                        />
-                        <span>{material.title}</span>
-                      </label>
-                    ))}
-                    <Button
-                      variant="ghost"
-                      size="layout"
-                      type="button"
-                      className="text-button"
-                      disabled={!selectedMaterials.length}
-                      onClick={addMaterials}
-                    >
-                      将选中素材原文加入简历
-                    </Button>
-                  </details>
-                )}
-                <p className="hint">
-                  分析会发送当前简历、岗位描述及选中的素材到配置的 AI 服务。市场与语言建议供参考，请核对事实。
-                </p>
-                {connection.mode === 'server' ? (
-                  <AgentChat
-                    document={document}
-                    materials={materials.filter((m) => selectedMaterials.includes(m.id))}
-                    connection={connection}
-                    notify={notify}
-                  />
-                ) : busy ? (
-                  <Busy label="正在分析你的经历…" onCancel={() => controller.current?.abort()} />
-                ) : (
+                <div className="ai-workspace-header">
+                  <div>
+                    <h2>AI 简历助手</h2>
+                    <p>聊清楚经历，再确认修改。</p>
+                  </div>
                   <Button
-                    variant="default"
-                    size="default"
-                    type="button"
-                    className="button primary full-width"
-                    disabled={!document.extractionReviewed}
-                    onClick={() => void analyze()}
+                    variant="outline"
+                    size="sm"
+                    className="button secondary"
+                    onClick={() => setContextOpen(true)}
                   >
-                    <Sparkles size={17} />
-                    {document.analysisSummary ? '重新分析简历' : '开始 AI 分析'}
+                    <SlidersHorizontal size={15} />
+                    设置修改方向
                   </Button>
-                )}
-                {!document.extractionReviewed && <p className="hint">请先到「识别原稿」确认校对。</p>}
-                {document.analysisSummary && (
-                  <div className="analysis-summary">{document.analysisSummary}</div>
-                )}
-                {document.workflow?.research && document.workflow.research.length > 0 && (
-                  <details className="material-select">
-                    <summary>本轮参考的外部资料（{document.workflow.research.length}）</summary>
-                    <p className="hint">
-                      外部资料用于写法和岗位参考，不是个人经历的证据。未标明发布日期的资料不能证明是最新发布。
-                    </p>
-                    {document.workflow.research.map((source) => (
-                      <article key={source.id} className="research-source">
-                        <a href={source.url} target="_blank" rel="noreferrer">
-                          {source.title}
-                        </a>
-                        <small>
-                          发布日期：{source.publishedAt || '未提供'} · 检索日期：
-                          {source.retrievedAt.slice(0, 10)}
-                        </small>
-                        <p>{source.content}</p>
-                      </article>
-                    ))}
-                  </details>
-                )}
-                {document.analysisQuestions.length > 0 && (
-                  <div className="questions">
-                    <h3>再补充一点，亮点会更具体</h3>
-                    <ol>
-                      {document.analysisQuestions.map((q, i) => (
-                        <li key={i}>{q}</li>
-                      ))}
-                    </ol>
-                    <Textarea
-                      aria-label="补充亮点回答"
-                      value={answer}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      rows={4}
-                      placeholder="写下真实经历或数据依据…"
+                </div>
+                <div className="ai-context-summary">
+                  <span>当前修改方向</span>
+                  <strong>{document.targetRole || '通用简历优化'}</strong>
+                  <small>
+                    基于当前简历{selectedMaterials.length ? `和 ${selectedMaterials.length} 份参考素材` : ''}
+                  </small>
+                </div>
+                <div
+                  className="ai-view-tabs"
+                  role="tablist"
+                  aria-label="AI 工作区"
+                  onKeyDown={(event) => {
+                    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+                    event.preventDefault()
+                    const next =
+                      event.key === 'Home'
+                        ? 'chat'
+                        : event.key === 'End'
+                          ? 'review'
+                          : aiView === 'chat'
+                            ? 'review'
+                            : 'chat'
+                    setAiView(next)
+                    event.currentTarget.querySelector<HTMLButtonElement>(`#ai-${next}-tab`)?.focus()
+                  }}
+                >
+                  <Button
+                    variant="ghost"
+                    role="tab"
+                    id="ai-chat-tab"
+                    aria-selected={aiView === 'chat'}
+                    tabIndex={aiView === 'chat' ? 0 : -1}
+                    aria-controls="ai-chat-panel"
+                    onClick={() => setAiView('chat')}
+                  >
+                    对话
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    role="tab"
+                    id="ai-review-tab"
+                    aria-selected={aiView === 'review'}
+                    tabIndex={aiView === 'review' ? 0 : -1}
+                    aria-controls="ai-review-panel"
+                    onClick={() => setAiView('review')}
+                  >
+                    修改建议 <span>{pending.length}</span>
+                  </Button>
+                </div>
+                <div
+                  id="ai-chat-panel"
+                  role="tabpanel"
+                  aria-labelledby="ai-chat-tab"
+                  className="ai-chat-panel"
+                  hidden={aiView !== 'chat'}
+                >
+                  {connection.mode === 'server' ? (
+                    <AgentChat
+                      document={document}
+                      materials={materials.filter((m) => selectedMaterials.includes(m.id))}
+                      connection={connection}
+                      notify={notify}
+                      pendingCount={pending.length}
+                      onReview={() => setAiView('review')}
+                      discussion={discussion}
+                      onDiscussionUsed={() => setDiscussion(null)}
+                      active={aiView === 'chat'}
                     />
-                    <Button
-                      variant="outline"
-                      size="default"
-                      type="button"
-                      className="button secondary"
-                      disabled={!answer.trim()}
-                      onClick={() => void saveAnswer()}
-                    >
-                      保存为经历素材
-                    </Button>
-                  </div>
-                )}
-                {pending.length > 0 && (
-                  <div className="suggestion-heading">
-                    <h3>{pending.length} 条待审阅建议</h3>
-                    <Button
-                      variant="ghost"
-                      size="layout"
-                      type="button"
-                      className="text-button"
-                      disabled={!pending.some((s) => s.confirmed)}
-                      onClick={() => void apply(pending.filter((s) => s.confirmed).map((s) => s.id))}
-                    >
-                      应用所有已确认建议
-                    </Button>
-                  </div>
-                )}
-                {pending.map((suggestion) => (
-                  <article className="suggestion" key={suggestion.id}>
-                    <span className="eyebrow">{targetLabel(document.content, suggestion.target)}</span>
-                    <p className="suggestion-reason">{suggestion.reason}</p>
-                    <SuggestionDiff before={suggestion.before} after={suggestion.after} />
-                    <p className="hint">参考来源：{suggestion.evidence.join('、')}</p>
-                    {suggestion.reviewContext === reviewContext(document) &&
-                      suggestion.references?.map((id) => {
-                        const source = document.workflow?.research.find((s) => s.id === id)
-                        return source ? (
-                          <p className="hint" key={id}>
-                            外部参考：
-                            <a href={source.url} target="_blank" rel="noreferrer">
-                              {source.title}
-                            </a>
-                          </p>
-                        ) : null
-                      })}
-                    {suggestion.question && <div className="notice warning">{suggestion.question}</div>}
-                    <label className="check-row">
-                      <Checkbox
-                        key={`${suggestion.id}-${suggestion.confirmed}`}
-                        defaultChecked={suggestion.confirmed}
-                        onCheckedChange={(checked) => {
-                          const confirmed = checked === true
-                          void change((doc) => ({
-                            ...doc,
-                            suggestions: doc.suggestions.map((s) =>
-                              s.id === suggestion.id ? { ...s, confirmed } : s,
-                            ),
-                          }))
-                        }}
-                      />
-                      <span>我已核对，修改后的事实准确</span>
-                    </label>
-                    <div className="suggestion-actions">
+                  ) : (
+                    <DirectChat
+                      document={document}
+                      connection={connection}
+                      onSettings={onSettings}
+                      pendingCount={pending.length}
+                      onReview={() => setAiView('review')}
+                      discussion={discussion}
+                      onDiscussionUsed={() => setDiscussion(null)}
+                      active={aiView === 'chat'}
+                    />
+                  )}
+                </div>
+                <div
+                  id="ai-review-panel"
+                  role="tabpanel"
+                  aria-labelledby="ai-review-tab"
+                  className="ai-review-panel"
+                  hidden={aiView !== 'review'}
+                >
+                  <p className="review-intro">这里是尚未写入简历的修改。核对后采纳，或回到对话继续调整。</p>
+                  {review}
+                  {!pending.length && (
+                    <div className="chat-welcome">
+                      <Check size={26} />
+                      <h3>没有待审阅的修改</h3>
+                      <p>继续和助手讨论，或在「修改记录」中查看已采纳的内容。</p>
                       <Button
-                        variant="ghost"
-                        size="layout"
-                        type="button"
-                        className="text-button muted"
-                        onClick={() =>
-                          void change((doc) => ({
-                            ...doc,
-                            suggestions: doc.suggestions.map((s) =>
-                              s.id === suggestion.id ? { ...s, status: 'dismissed' } : s,
-                            ),
-                          }))
-                        }
+                        variant="outline"
+                        className="button secondary"
+                        onClick={() => setAiView('chat')}
                       >
-                        忽略
-                      </Button>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        type="button"
-                        className="button primary small"
-                        disabled={!suggestion.confirmed}
-                        onClick={() => void apply([suggestion.id])}
-                      >
-                        <Check size={15} />
-                        采纳修改
+                        返回对话
                       </Button>
                     </div>
-                  </article>
-                ))}
+                  )}
+                </div>
               </>
             )}
             {tab === 'sources' && (
@@ -793,6 +746,11 @@ export default function Editor({
                       {entry.reverted ? '已撤回' : '撤回'}
                     </Button>
                     <ul>
+                      {entry.additions?.flatMap((addition) =>
+                        addition.items.map((item) => (
+                          <li key={item.id}>新增经历 · {item.title || item.organization || '经历'}</li>
+                        )),
+                      )}
                       {entry.changes.map((c, i) => (
                         <li key={i}>{targetLabel(document.content, c.target)}</li>
                       ))}
@@ -869,6 +827,98 @@ export default function Editor({
           connection={connection}
           onClose={() => setJobOpen(false)}
           onCreated={onOpen}
+          notify={notify}
+        />
+      )}
+      {contextOpen && (
+        <Modal title="设置修改方向" onClose={() => setContextOpen(false)} wide>
+          <div className="modal-body">
+            <p className="experience-intro">
+              这些信息帮助 AI 判断简历的修改方向；留空也可以先聊。修改会在下一轮对话中生效。
+            </p>
+
+            <div className="field-grid">
+              <Field
+                label="目标岗位"
+                value={document.targetRole}
+                onCommit={(value, before) => writeMetadata('targetRole', value, before)}
+              />
+              <Field
+                label="招聘市场"
+                value={document.market}
+                placeholder="例如：中国、新加坡"
+                onCommit={(value, before) => writeMetadata('market', value, before)}
+              />
+              <label className="field">
+                <span>目标简历语言</span>
+                <NativeSelect
+                  value={document.locale}
+                  onChange={(e) => {
+                    const locale = e.currentTarget.value
+                    void change((doc) => ({ ...doc, locale }))
+                  }}
+                >
+                  <NativeSelectOption value="zh-CN">简体中文</NativeSelectOption>
+                  <NativeSelectOption value="en">English</NativeSelectOption>
+                  <NativeSelectOption value="ja">日本語</NativeSelectOption>
+                </NativeSelect>
+              </label>
+            </div>
+            <Field
+              label="岗位描述（可选）"
+              value={document.jobDescription}
+              onCommit={(value, before) => writeMetadata('jobDescription', value, before)}
+              multiline
+            />
+            {materials.length > 0 && (
+              <section className="context-materials">
+                <h3>
+                  <BookOpen size={15} />
+                  选择参考素材（已选 {selectedMaterials.length}）
+                </h3>
+                {materials.map((material) => (
+                  <label className="check-row" key={material.id}>
+                    <Checkbox
+                      checked={selectedMaterials.includes(material.id)}
+                      onCheckedChange={(checked) =>
+                        setSelectedMaterials(
+                          checked === true
+                            ? [...selectedMaterials, material.id]
+                            : selectedMaterials.filter((id) => id !== material.id),
+                        )
+                      }
+                    />
+                    <span>{material.title}</span>
+                  </label>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="layout"
+                  type="button"
+                  className="text-button"
+                  disabled={!selectedMaterials.length}
+                  onClick={addMaterials}
+                >
+                  将选中素材原文加入简历
+                </Button>
+              </section>
+            )}
+            <p className="hint">每轮对话会将当前简历、岗位描述、选中素材及对话记录发送到你配置的 AI 服务。</p>
+
+            <div className="modal-actions">
+              <Button className="button primary" onClick={() => setContextOpen(false)}>
+                完成
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {experienceOpen && (
+        <AddExperienceDialog
+          document={document}
+          connection={connection}
+          onClose={() => setExperienceOpen(false)}
+          onSettings={onSettings}
           notify={notify}
         />
       )}
