@@ -127,23 +127,11 @@ export default function Editor({
     }
   }
   const pending = document.suggestions.filter((s) => s.status === 'pending')
+  const currentContext = reviewContext(document)
+  const currentMaterials = materialSnapshot(materials.filter((m) => selectedMaterials.includes(m.id)))
   const apply = async (ids: string[]) => {
     try {
-      await db.transaction('rw', db.resumes, db.materials, db.sources, async () => {
-        const latest = await db.resumes.get(document.id)
-        if (!latest) throw new Error('简历不存在。')
-        const chosen = (await db.materials.bulkGet(workflowFor(latest).materialIds)).filter(
-          (m): m is NonNullable<typeof m> => Boolean(m),
-        )
-        if (
-          latest.suggestions.some(
-            (s) =>
-              ids.includes(s.id) && s.materialSnapshot && s.materialSnapshot !== materialSnapshot(chosen),
-          )
-        )
-          throw new Error('参考素材已变化，请重新分析后采纳。')
-        await mutateResume(document.id, (doc) => applySuggestions(doc, ids))
-      })
+      await mutateResume(document.id, (doc) => applySuggestions(doc, ids))
       notify('建议已应用，可以在修改记录中撤回。')
     } catch (e) {
       notify(errorMessage(e), 'error')
@@ -213,6 +201,10 @@ export default function Editor({
       {pending.map((suggestion) => (
         <article className="suggestion" key={suggestion.id}>
           <span className="eyebrow">{targetLabel(document.content, suggestion.target)}</span>
+          {((suggestion.reviewContext && suggestion.reviewContext !== currentContext) ||
+            (suggestion.materialSnapshot && suggestion.materialSnapshot !== currentMaterials)) && (
+            <p className="hint">参考素材或修改方向已更新。这是此前生成的建议，核对内容后仍可采纳。</p>
+          )}
           <p className="suggestion-reason">{suggestion.reason}</p>
           <SuggestionDiff before={suggestion.before} after={suggestion.after} />
           <p className="hint">参考来源：{suggestion.evidence.join('、')}</p>

@@ -187,8 +187,11 @@ test('SDK chat: clarify, persist approval, search, review, apply and undo', asyn
     page.getByText('当前简历、岗位或素材已更新。下一条消息会使用最新内容，旧的修改方向需重新确认。'),
   ).toBeVisible()
   await page.getByRole('tab', { name: /修改建议/ }).click()
+  await expect(
+    page.getByText('参考素材或修改方向已更新。这是此前生成的建议，核对内容后仍可采纳。'),
+  ).toBeVisible()
   await page.getByRole('button', { name: '采纳修改', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('目标已变化')
+  await expect(page.getByTestId('resume-paper')).toContainText('负责支付表单交互开发')
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: testInfo.outputPath('agent-mobile.png'), fullPage: true })
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
