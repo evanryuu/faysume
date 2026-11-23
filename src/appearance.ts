@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import { z } from 'zod'
+import { markdownAppearanceSchema, markdownAppearanceStyle } from './markdownAppearance'
 import type { ResumeAppearance } from './types'
 
 export const defaultAppearance: ResumeAppearance = {
@@ -19,6 +20,7 @@ export const appearanceSchema = z
     lineHeight: z.number().min(1.3).max(1.9),
     spacing: z.enum(['compact', 'standard', 'relaxed']),
     margin: z.number().min(10).max(24),
+    markdown: markdownAppearanceSchema.optional(),
   })
   .strict()
 
@@ -76,5 +78,6 @@ export function appearanceStyle(appearance: ResumeAppearance): CSSProperties {
     '--resume-leading': appearance.lineHeight,
     '--resume-gap': `${{ compact: 4, standard: 6, relaxed: 8 }[appearance.spacing]}mm`,
     '--resume-margin': `${appearance.margin}mm`,
+    ...markdownAppearanceStyle(appearance.markdown),
   } as CSSProperties
 }

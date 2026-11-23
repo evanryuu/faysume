@@ -2,15 +2,19 @@ import { Button } from './ui/button'
 import { NativeSelect, NativeSelectOption } from './ui/native-select'
 import { accentColors, readableAccent, resolveAppearance } from '../appearance'
 import type { ResumeAppearance } from '../types'
+import type { MarkdownElement, MarkdownElementStyle } from '../markdownAppearance'
+import MarkdownAppearancePanel from './MarkdownAppearancePanel'
 
 export default function AppearancePanel({
   value,
   onChange,
   onReset,
+  onMarkdownChange,
 }: {
   value?: ResumeAppearance
   onChange: (patch: Partial<ResumeAppearance>) => void
   onReset: () => void
+  onMarkdownChange: (element: MarkdownElement, patch: Partial<MarkdownElementStyle> | null) => void
 }) {
   const appearance = resolveAppearance(value)
   return (
@@ -52,7 +56,7 @@ export default function AppearancePanel({
           </label>
         </div>
         <p className="appearance-note">
-          正文保持深灰色。
+          默认正文使用深灰色，Markdown 元素可单独设置。
           {readableAccent(appearance.accentColor) !== appearance.accentColor
             ? '当前颜色较浅，标题已自动加深以保证清晰。'
             : '主题色用于标题和装饰。'}
@@ -126,6 +130,7 @@ export default function AppearancePanel({
         </label>
       </div>
       <p className="appearance-note">字体使用本机可用字体；另一台设备上的字形可能不同。</p>
+      <MarkdownAppearancePanel appearance={appearance} onChange={onMarkdownChange} />
     </section>
   )
 }
