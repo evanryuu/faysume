@@ -37,6 +37,7 @@ import AgentChat from './AgentChat'
 import AppearancePanel from './AppearancePanel'
 import { defaultAppearance, resolveAppearance } from '../appearance'
 import DirectChat from './DirectChat'
+import { mergeMarkdownStyle } from '../markdownAppearance'
 import SuggestionDiff from './SuggestionDiff'
 import type { AIConnection, ProfileField, ResumeDocument, SectionKind, Target, Template } from '../types'
 import PaginatedPreview from './PaginatedPreview'
@@ -798,6 +799,13 @@ export default function Editor({
                 }))
               }
               onReset={() => void change((doc) => ({ ...doc, appearance: { ...defaultAppearance } }))}
+              onMarkdownChange={(element, patch) =>
+                void change((doc) => {
+                  const appearance = resolveAppearance(doc.appearance)
+                  const markdown = mergeMarkdownStyle(appearance.markdown, element, patch)
+                  return { ...doc, appearance: { ...appearance, markdown } }
+                })
+              }
             />
           )}
           <PaginatedPreview key={document.id} document={document} onEdit={write} />

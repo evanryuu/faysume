@@ -1,3 +1,5 @@
+import type { MarkdownAppearance } from './markdownAppearance'
+
 export type ProfileField = 'name' | 'headline' | 'email' | 'phone' | 'location' | 'website' | 'summary'
 export type ItemField = 'title' | 'organization' | 'location' | 'startDate' | 'endDate' | 'description'
 export type SectionKind = 'work' | 'project' | 'education' | 'skills' | 'other'
@@ -79,6 +81,7 @@ export interface ResumeAppearance {
   lineHeight: number
   spacing: 'compact' | 'standard' | 'relaxed'
   margin: number
+  markdown?: MarkdownAppearance
 }
 export interface DirectChatMessage {
   id: string
