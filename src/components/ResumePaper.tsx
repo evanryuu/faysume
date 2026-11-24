@@ -1,4 +1,5 @@
 import { appearanceStyle, resolveAppearance } from '../appearance'
+import { careerOverview, formatCareerLength } from '../domain'
 import type { ItemField, ProfileField, ResumeDocument, Target } from '../types'
 import EditablePaperText, { PaperText } from './EditablePaperText'
 
@@ -47,6 +48,9 @@ export default function ResumePaper({
     )
   const profile = (field: ProfileField, label: string, multiline = false, inline = false, placeholder = '') =>
     text(c[field], { kind: 'profile', field }, label, multiline, inline, placeholder)
+  const zh = document.locale.startsWith('zh')
+  const overview = c.sections.some((s) => s.kind === 'overview') ? careerOverview(c) : null
+  const autoLength = overview?.months != null ? formatCareerLength(overview.months, document.locale) : ''
   return (
     <article
       className={`resume-paper template-${document.template} ${miniature ? 'miniature' : ''}`}
@@ -85,14 +89,39 @@ export default function ResumePaper({
       </header>
       {c.summary && (
         <section className="paper-section">
-          <h2>{document.locale.startsWith('zh') ? '个人简介' : 'Profile'}</h2>
+          <h2>{zh ? '个人简介' : 'Profile'}</h2>
           <div className="paper-description">{profile('summary', '个人简介', true)}</div>
         </section>
       )}
       {c.sections.map((section) => (
-        <section className="paper-section" key={section.id}>
+        <section
+          key={section.id}
+          className={`paper-section${section.kind === 'overview' ? ' paper-overview' : ''}`}
+          data-testid={section.kind === 'overview' ? 'career-overview' : undefined}
+        >
           <h2>
-            {text(section.title, { kind: 'section', sectionId: section.id, field: 'title' }, '区块标题')}
+            {text(
+              section.title,
+              { kind: 'section', sectionId: section.id, field: 'title' },
+              '区块标题',
+              false,
+              section.kind === 'overview',
+            )}
+            {section.kind === 'overview' && (section.careerLength || autoLength || editable) && (
+              <>
+                {' '}
+                <span className="paper-overview-total">
+                  {text(
+                    section.careerLength ?? '',
+                    { kind: 'section', sectionId: section.id, field: 'careerLength' },
+                    '总年限',
+                    false,
+                    true,
+                    autoLength,
+                  )}
+                </span>
+              </>
+            )}
           </h2>
           {section.items.map((item) => {
             const itemText = (field: ItemField, label: string, multiline = false, inline = false) =>
@@ -129,6 +158,19 @@ export default function ResumePaper({
               </div>
             )
           })}
+          {section.kind === 'overview' && !!overview?.items.length && (
+            <ol>
+              {overview.items.map((item) => (
+                <li key={item.id}>
+                  <span className="paper-date">
+                    {[item.startDate, item.endDate].filter(Boolean).join(' — ')}
+                  </span>{' '}
+                  <span className="paper-overview-organization">{item.organization}</span>{' '}
+                  <span className="paper-overview-title">{item.title}</span>
+                </li>
+              ))}
+            </ol>
+          )}
         </section>
       ))}
       {!c.summary && !c.sections.length && !c.headline && (

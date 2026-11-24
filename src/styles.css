@@ -820,6 +820,13 @@ select {
   color: #939b8d;
   line-height: 1.8;
 }
+.overview-source {
+  margin: 0 0 12px;
+  padding-left: 18px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--muted);
+}
 .eyebrow {
   font-size: 10px;
   letter-spacing: 1.4px;
@@ -3146,6 +3153,37 @@ select {
   font-size: var(--resume-size) !important;
   line-height: var(--resume-leading) !important;
   color: var(--resume-text);
+}
+.resume-paper[data-appearance] .paper-overview-total {
+  margin-left: 2mm;
+  font-weight: 400;
+  letter-spacing: normal;
+  font-size: calc(var(--resume-size) * 0.85);
+  color: var(--resume-muted);
+}
+.resume-paper[data-appearance] .paper-overview ol {
+  display: grid;
+  grid-template-columns: max-content fit-content(45%) minmax(0, 1fr);
+  gap: 1mm 4mm;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.resume-paper[data-appearance] .paper-overview li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: baseline;
+  break-inside: avoid;
+  font-size: var(--resume-size);
+  color: var(--resume-text);
+}
+.resume-paper[data-appearance] .paper-overview .paper-date {
+  text-align: left;
+}
+.resume-paper[data-appearance] .paper-overview-organization {
+  font-weight: 600;
+  color: var(--resume-heading);
 }
 .resume-paper[data-appearance].template-modern .paper-header {
   background: var(--resume-accent);

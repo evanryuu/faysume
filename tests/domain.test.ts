@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   applySuggestions,
+  careerOverview,
   cloneResume,
   createExampleResume,
   createItem,
   createResume,
   createSection,
   documentSchema,
+  formatCareerLength,
   readTarget,
   revertHistory,
   targetLabel,
@@ -178,4 +180,76 @@ it('preserves text/entry layouts through validation, copy and AI edits while acc
   }
   const edited = writeTarget(parsed.content, target, '更新开源贡献')
   expect(edited.sections[0].items[0]).toMatchObject({ layout: 'text', description: '更新开源贡献' })
+})
+
+describe('职业概览', () => {
+  const today = new Date(2026, 10, 23)
+  function content(...items: [string, string, string, string][]) {
+    const doc = createResume()
+    const work = createSection('work')
+    work.items = items.map(([title, organization, startDate, endDate]) => ({
+      ...createItem(),
+      title,
+      organization,
+      startDate,
+      endDate,
+    }))
+    const education = createSection('education')
+    education.items = [{ ...createItem(), title: '本科', startDate: '2014.09', endDate: '2018.06' }]
+    doc.content.sections = [work, education]
+    return doc.content
+  }
+
+  it('只列出工作经历里的经历条目，保持简历里的顺序', () => {
+    const c = content(
+      ['产品设计师', '远山工作室', '2023.03', '至今'],
+      ['交互设计师', '晨光科技', '2020.07', '2023.02'],
+    )
+    c.sections[0].items.push({ ...createItem('text'), description: '自由文本不算一段经历' })
+    expect(careerOverview(c, today).items.map((item) => item.organization)).toEqual([
+      '远山工作室',
+      '晨光科技',
+    ])
+  })
+
+  it('总月数包含首尾两个月，「至今」按当前月份算', () => {
+    const c = content(
+      ['产品设计师', '远山工作室', '2023.03', '至今'],
+      ['交互设计师', '晨光科技', '2020.07', '2023.02'],
+    )
+    expect(careerOverview(c, today).months).toBe(77)
+    expect(formatCareerLength(77, 'zh-CN')).toBe('共 6 年 5 个月')
+    expect(formatCareerLength(12, 'zh-CN')).toBe('共 1 年')
+    expect(formatCareerLength(14, 'en-US')).toBe('1 yr 2 mos')
+  })
+
+  it('重叠的时间段只算一次', () => {
+    const c = content(
+      ['A', '甲', '2020-01', '2020-12'],
+      ['B', '乙', '2020年6月', '2021年3月'],
+      ['C', '丙', '2020/2', '2020/4'],
+    )
+    expect(careerOverview(c, today).months).toBe(15)
+  })
+
+  it('有一段日期认不出或缺失时，不给出总月数', () => {
+    expect(careerOverview(content(['A', '甲', 'Mar 2020', '2021.01']), today).months).toBeNull()
+    expect(careerOverview(content(['A', '甲', '2020.01', '']), today).months).toBeNull()
+    expect(careerOverview(content(['A', '甲', '2022.01', '2021.01']), today).months).toBeNull()
+  })
+
+  it('职业概览区块的总年限可以手写、清空恢复自动，并能通过文档校验', () => {
+    const doc = createResume()
+    const overview = createSection('overview')
+    doc.content.sections = [overview]
+    expect(overview.title).toBe('职业概览')
+    const target = { kind: 'section', sectionId: overview.id, field: 'careerLength' } as const
+    expect(readTarget(doc.content, target)).toBe('')
+    doc.content = writeTarget(doc.content, target, '8 年+')
+    expect(readTarget(doc.content, target)).toBe('8 年+')
+    expect(targetLabel(doc.content, target)).toBe('职业概览 · 总年限')
+    expect(documentSchema.safeParse(doc).success).toBe(true)
+    doc.content = writeTarget(doc.content, target, '')
+    expect(readTarget(doc.content, target)).toBe('')
+  })
 })

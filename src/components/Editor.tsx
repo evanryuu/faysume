@@ -24,9 +24,11 @@ import {
 import { db, mutateResume, insertResume } from '../db'
 import {
   applySuggestions,
+  careerOverview,
   cloneResume,
   createItem,
   createSection,
+  formatCareerLength,
   readTarget,
   revertHistory,
   targetLabel,
@@ -90,6 +92,8 @@ export default function Editor({
     [document.id, document.sourceIds.join(',')],
     [],
   )
+  const overview = careerOverview(document.content)
+  const autoLength = overview.months !== null ? formatCareerLength(overview.months, document.locale) : ''
   const change = async (mutate: (doc: ResumeDocument) => ResumeDocument) => {
     try {
       await mutateResume(document.id, mutate)
@@ -477,6 +481,63 @@ export default function Editor({
                         </Button>
                       </div>
                     </div>
+                    {section.kind === 'overview' && (
+                      <div className="overview-editor">
+                        <Field
+                          label="总年限"
+                          value={section.careerLength ?? ''}
+                          placeholder={
+                            autoLength
+                              ? `留空则自动计算：${autoLength}`
+                              : '工作经历的日期不完整，暂时无法自动计算'
+                          }
+                          onCommit={(value, before) =>
+                            write(
+                              { kind: 'section', sectionId: section.id, field: 'careerLength' },
+                              value,
+                              before,
+                            )
+                          }
+                        />
+                        {section.careerLength && (
+                          <Button
+                            variant="ghost"
+                            size="layout"
+                            type="button"
+                            className="text-button"
+                            onClick={() =>
+                              write(
+                                { kind: 'section', sectionId: section.id, field: 'careerLength' },
+                                '',
+                                section.careerLength!,
+                              )
+                            }
+                          >
+                            恢复自动计算
+                          </Button>
+                        )}
+                        <p className="hint">
+                          {overview.items.length
+                            ? '下面的时间、公司和职位来自工作经历区块，在那里修改后会自动更新。'
+                            : '还没有工作经历条目。添加工作经历后，这里会自动列出时间、公司和职位。'}
+                        </p>
+                        {!!overview.items.length && (
+                          <ul className="overview-source">
+                            {overview.items.map((item) => (
+                              <li key={item.id}>
+                                {[
+                                  [item.startDate, item.endDate].filter(Boolean).join(' — '),
+                                  item.organization,
+                                  item.title,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
                     {section.items.map((item, i) => (
                       <ResumeItemEditor
                         key={item.id}
@@ -490,24 +551,30 @@ export default function Editor({
                       />
                     ))}
                     <div className="add-content-actions">
-                      {(['text', 'entry'] as const).map((layout) => (
-                        <Button
-                          key={layout}
-                          variant="secondary"
-                          className="button subtle"
-                          onClick={() =>
-                            void change((doc) => {
-                              doc.content.sections
-                                .find((s) => s.id === section.id)!
-                                .items.push(createItem(layout))
-                              return doc
-                            })
-                          }
-                        >
-                          <Plus size={15} />
-                          {layout === 'text' ? '添加自由文本' : '添加经历条目'}
-                        </Button>
-                      ))}
+                      {(section.kind === 'overview' ? (['text'] as const) : (['text', 'entry'] as const)).map(
+                        (layout) => (
+                          <Button
+                            key={layout}
+                            variant="secondary"
+                            className="button subtle"
+                            onClick={() =>
+                              void change((doc) => {
+                                doc.content.sections
+                                  .find((s) => s.id === section.id)!
+                                  .items.push(createItem(layout))
+                                return doc
+                              })
+                            }
+                          >
+                            <Plus size={15} />
+                            {layout === 'text'
+                              ? section.kind === 'overview'
+                                ? '添加补充说明'
+                                : '添加自由文本'
+                              : '添加经历条目'}
+                          </Button>
+                        ),
+                      )}
                     </div>
                   </div>
                 ))}
@@ -521,6 +588,7 @@ export default function Editor({
                     <NativeSelectOption value="project">项目经历</NativeSelectOption>
                     <NativeSelectOption value="education">教育背景</NativeSelectOption>
                     <NativeSelectOption value="skills">技能</NativeSelectOption>
+                    <NativeSelectOption value="overview">职业概览</NativeSelectOption>
                     <NativeSelectOption value="other">自定义区块</NativeSelectOption>
                   </NativeSelect>
                   <Button
@@ -531,6 +599,15 @@ export default function Editor({
                     onClick={() =>
                       void change((doc) => {
                         const section = createSection(adding)
+                        if (adding === 'overview') {
+                          const work = doc.content.sections.findIndex((s) => s.kind === 'work')
+                          doc.content.sections.splice(
+                            work < 0 ? doc.content.sections.length : work,
+                            0,
+                            section,
+                          )
+                          return doc
+                        }
                         section.items.push(
                           createItem(adding === 'skills' || adding === 'other' ? 'text' : 'entry'),
                         )

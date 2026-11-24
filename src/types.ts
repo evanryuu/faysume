@@ -2,7 +2,7 @@ import type { MarkdownAppearance } from './markdownAppearance'
 
 export type ProfileField = 'name' | 'headline' | 'email' | 'phone' | 'location' | 'website' | 'summary'
 export type ItemField = 'title' | 'organization' | 'location' | 'startDate' | 'endDate' | 'description'
-export type SectionKind = 'work' | 'project' | 'education' | 'skills' | 'other'
+export type SectionKind = 'work' | 'project' | 'education' | 'skills' | 'other' | 'overview'
 export interface ResumeItem {
   layout?: 'text' | 'entry'
   id: string
@@ -18,6 +18,8 @@ export interface ResumeSection {
   title: string
   kind: SectionKind
   items: ResumeItem[]
+  /** 只给职业概览用：手写的总年限，空字符串表示按工作经历自动计算 */
+  careerLength?: string
 }
 export interface ResumeContent {
   name: string
@@ -32,7 +34,7 @@ export interface ResumeContent {
 export type Target =
   | { kind: 'profile'; field: ProfileField }
   | { kind: 'item'; sectionId: string; itemId: string; field: ItemField }
-  | { kind: 'section'; sectionId: string; field: 'title' }
+  | { kind: 'section'; sectionId: string; field: 'title' | 'careerLength' }
 export interface Suggestion {
   id: string
   target: Target

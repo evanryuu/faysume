@@ -18,7 +18,7 @@ const id = z.string().min(1).max(200)
 const timestamp = z.iso.datetime()
 const profileFields = ['name', 'headline', 'email', 'phone', 'location', 'website', 'summary'] as const
 const itemFields = ['title', 'organization', 'location', 'startDate', 'endDate', 'description'] as const
-const kinds = ['work', 'project', 'education', 'skills', 'other'] as const
+const kinds = ['work', 'project', 'education', 'skills', 'other', 'overview'] as const
 const itemSchema = z
   .object({
     id,
@@ -32,7 +32,13 @@ const itemSchema = z
   })
   .strict()
 const sectionSchema = z
-  .object({ id, title: text, kind: z.enum(kinds), items: z.array(itemSchema).max(1000) })
+  .object({
+    id,
+    title: text,
+    kind: z.enum(kinds),
+    items: z.array(itemSchema).max(1000),
+    careerLength: text.optional(),
+  })
   .strict()
 export const contentSchema = z
   .object({
@@ -58,7 +64,7 @@ export const contentSchema = z
 export const targetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('profile'), field: z.enum(profileFields) }).strict(),
   z.object({ kind: z.literal('item'), sectionId: id, itemId: id, field: z.enum(itemFields) }).strict(),
-  z.object({ kind: z.literal('section'), sectionId: id, field: z.literal('title') }).strict(),
+  z.object({ kind: z.literal('section'), sectionId: id, field: z.enum(['title', 'careerLength']) }).strict(),
 ])
 const changeSchema = z.object({ target: targetSchema, before: text, after: text }).strict()
 export const suggestionSchema = z
@@ -198,6 +204,7 @@ const sectionNames: Record<SectionKind, string> = {
   education: '教育背景',
   skills: '技能',
   other: '其他经历',
+  overview: '职业概览',
 }
 export const createItem = (layout: 'text' | 'entry' = 'entry'): ResumeItem => ({
   layout,
@@ -317,7 +324,8 @@ export function readTarget(content: ResumeContent, input: Target): string {
   if (target.kind === 'profile') return content[target.field]
   const section = content.sections.find((s) => s.id === target.sectionId)
   if (!section) throw new Error('建议对应的章节已不存在')
-  if (target.kind === 'section') return section.title
+  if (target.kind === 'section')
+    return target.field === 'title' ? section.title : (section.careerLength ?? '')
   const item = section.items.find((i) => i.id === target.itemId)
   if (!item) throw new Error('建议对应的经历已不存在')
   return item[target.field]
@@ -329,7 +337,7 @@ export function writeTarget(content: ResumeContent, target: Target, value: strin
   if (target.kind === 'profile') copy[target.field] = value
   else {
     const section = copy.sections.find((s) => s.id === target.sectionId)!
-    if (target.kind === 'section') section.title = value
+    if (target.kind === 'section') section[target.field] = value
     else section.items.find((i) => i.id === target.itemId)![target.field] = value
   }
   return copy
@@ -343,6 +351,7 @@ const fieldNames: Record<string, string> = {
   website: '个人网站',
   summary: '个人简介',
   title: '标题',
+  careerLength: '总年限',
   organization: '组织',
   startDate: '开始时间',
   endDate: '结束时间',
@@ -351,7 +360,7 @@ const fieldNames: Record<string, string> = {
 export function targetLabel(content: ResumeContent, target: Target): string {
   if (target.kind === 'profile') return fieldNames[target.field]
   const section = content.sections.find((s) => s.id === target.sectionId)
-  if (target.kind === 'section') return `${section?.title || '已删除章节'} · 标题`
+  if (target.kind === 'section') return `${section?.title || '已删除章节'} · ${fieldNames[target.field]}`
   const item = section?.items.find((i) => i.id === target.itemId)
   return `${section?.title || '已删除章节'} · ${item?.title || item?.organization || '经历'} · ${fieldNames[target.field]}`
 }
@@ -468,4 +477,45 @@ export function appendExperiences(doc: ResumeDocument, entries: ExperienceDraft[
     reverted: false,
   })
   return documentSchema.parse(copy)
+}
+const ongoing = /^(至今|现在|目前|present|now|current)$/i
+/** 只认「年」或「年 + 月」（2023.03、2023-3、2023年3月、2023）；认不出返回 null，宁可不显示总年限也不算错 */
+function monthIndex(value: string, end: boolean, today: Date): number | null {
+  const trimmed = value.trim()
+  if (end && ongoing.test(trimmed)) return today.getFullYear() * 12 + today.getMonth()
+  const match = /^(\d{4})(?:\s*[./\-年]\s*(\d{1,2})\s*月?)?$/.exec(trimmed)
+  if (!match) return null
+  const month = match[2] ? Number(match[2]) : end ? 12 : 1
+  if (month < 1 || month > 12) return null
+  return Number(match[1]) * 12 + month - 1
+}
+/** 职业概览：工作经历区块里的经历条目，加上去掉重叠时段后的总月数；有任何一段日期认不出时总月数为 null */
+export function careerOverview(content: ResumeContent, today = new Date()) {
+  const items = content.sections
+    .filter((section) => section.kind === 'work')
+    .flatMap((section) => section.items)
+    .filter((item) => item.layout !== 'text' && (item.title || item.organization))
+  const ranges = items.map((item) => [
+    monthIndex(item.startDate, false, today),
+    monthIndex(item.endDate, true, today),
+  ])
+  if (!items.length || ranges.some(([start, end]) => start === null || end === null || start > end))
+    return { items, months: null }
+  let months = 0
+  let covered = -Infinity
+  for (const [start, end] of (ranges as [number, number][]).sort((a, b) => a[0] - b[0])) {
+    const from = Math.max(start, covered)
+    if (end >= from) months += end - from + 1
+    covered = Math.max(covered, end + 1)
+  }
+  return { items, months }
+}
+export function formatCareerLength(months: number, locale: string) {
+  const years = Math.floor(months / 12)
+  const rest = months % 12
+  return locale.startsWith('zh')
+    ? ['共', years && `${years} 年`, rest && `${rest} 个月`].filter(Boolean).join(' ')
+    : [years && `${years} yr${years > 1 ? 's' : ''}`, rest && `${rest} mo${rest > 1 ? 's' : ''}`]
+        .filter(Boolean)
+        .join(' ')
 }
