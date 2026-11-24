@@ -32,8 +32,7 @@ test('preview text edits sync with the form and persist after reload', async ({ 
   await name.fill('刘瀚')
   await name.press('Enter')
   await expect(page.getByRole('textbox', { name: '姓名', exact: true })).toHaveValue('刘瀚')
-  await page.getByLabel('新增区块类型').selectOption('skills')
-  await page.getByRole('button', { name: '添加区块', exact: true }).click()
+  await page.getByRole('group', { name: '添加区块' }).getByRole('button', { name: /^技能/ }).click()
   const formText = page.getByRole('textbox', { name: '文本内容', exact: true })
   await formText.fill('熟悉 React / Vue\n熟悉 TypeScript')
   await formText.blur()
@@ -62,8 +61,8 @@ test('preview supports entry fields, templates and mobile without printing editi
   const paper = page.getByTestId('resume-paper')
   for (const [label, value] of [
     ['区块标题', '团队经历'],
-    ['职位 / 项目 / 学位', '高级产品设计师'],
-    ['公司 / 学校', '设计工作室'],
+    ['职位', '高级产品设计师'],
+    ['公司', '设计工作室'],
     ['开始时间', '2024.01'],
     ['结束时间', '2026.09'],
     ['职业标题', '设计负责人'],

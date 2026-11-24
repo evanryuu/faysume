@@ -136,7 +136,7 @@ test('renders rich body content while keeping source, refresh and single-line fi
   await expect(body).toHaveValue(sample)
   await page.getByRole('button', { name: '直接编辑', exact: true }).click()
   const inline = page.getByRole('textbox', { name: '预览：文本内容', exact: true })
-  const title = page.getByRole('textbox', { name: '预览：职位 / 项目 / 学位', exact: true })
+  const title = page.getByRole('textbox', { name: '预览：职位', exact: true })
   await title.focus()
   await title.press('Tab')
   await expect(inline).toBeFocused()

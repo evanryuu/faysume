@@ -9,17 +9,19 @@ for (const template of ['classic', 'modern', 'compact']) {
     await page.getByLabel('姓名', { exact: true }).fill('Short Entry Example')
     await page.getByLabel('姓名', { exact: true }).blur()
     await page.getByLabel('简历模板').selectOption(template)
-    await page.getByLabel('新增区块类型').selectOption('work')
-    await page.getByRole('button', { name: '添加区块', exact: true }).click()
-    await page.getByLabel('职位 / 项目 / 学位', { exact: true }).fill('Previous Role')
+    await page
+      .getByRole('group', { name: '添加区块' })
+      .getByRole('button', { name: /^工作经历/ })
+      .click()
+    await page.getByLabel('职位', { exact: true }).fill('Previous Role')
     const lines = (count: number) =>
       Array.from({ length: count }, (_, i) => `Earlier result ${i + 1}.`).join('\n')
     await page.getByRole('textbox', { name: '经历描述', exact: true }).fill(lines(18))
     await page.getByRole('textbox', { name: '经历描述', exact: true }).blur()
     await page.getByRole('button', { name: '添加经历条目', exact: true }).click()
     for (const [label, value] of [
-      ['职位 / 项目 / 学位', 'Short Role'],
-      ['公司 / 学校', 'Example Company'],
+      ['职位', 'Short Role'],
+      ['公司', 'Example Company'],
       ['开始时间', '2023.07'],
       ['结束时间', '2023.10'],
     ]) {
@@ -79,8 +81,10 @@ for (const template of ['classic', 'modern', 'compact']) {
     await page.getByLabel('姓名', { exact: true }).fill('Pagination Example')
     await page.getByLabel('姓名', { exact: true }).blur()
     await page.getByLabel('简历模板').selectOption(template)
-    await page.getByLabel('新增区块类型').selectOption('work')
-    await page.getByRole('button', { name: '添加区块', exact: true }).click()
+    await page
+      .getByRole('group', { name: '添加区块' })
+      .getByRole('button', { name: /^工作经历/ })
+      .click()
     const first = Array.from(
       { length: 18 },
       (_, i) => `FIRST-${String(i + 1).padStart(2, '0')} Delivered a documented project outcome.`,
@@ -89,11 +93,11 @@ for (const template of ['classic', 'modern', 'compact']) {
       { length: 28 },
       (_, i) => `SECOND-${String(i + 1).padStart(2, '0')} Led a cross-functional product initiative.`,
     ).join('\n')
-    await page.getByLabel('职位 / 项目 / 学位', { exact: true }).fill('First Role')
+    await page.getByLabel('职位', { exact: true }).fill('First Role')
     await page.getByRole('textbox', { name: '经历描述', exact: true }).fill(first)
     await page.getByRole('textbox', { name: '经历描述', exact: true }).blur()
     await page.getByRole('button', { name: '添加经历条目', exact: true }).click()
-    await page.getByLabel('职位 / 项目 / 学位', { exact: true }).nth(1).fill('Second Role')
+    await page.getByLabel('职位', { exact: true }).nth(1).fill('Second Role')
     await page.getByRole('textbox', { name: '经历描述', exact: true }).nth(1).fill(second)
     await page.getByRole('textbox', { name: '经历描述', exact: true }).nth(1).blur()
     await expect(page.getByTestId('resume-paper')).toContainText('SECOND-28')

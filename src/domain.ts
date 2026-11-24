@@ -4,6 +4,7 @@ import { workflowSchema } from './workflow'
 import type {
   ExperienceAddition,
   ExperienceDraft,
+  ItemField,
   ResumeContent,
   ResumeDocument,
   ResumeItem,
@@ -38,6 +39,7 @@ const sectionSchema = z
     kind: z.enum(kinds),
     items: z.array(itemSchema).max(1000),
     careerLength: text.optional(),
+    syncedWork: text.optional(),
   })
   .strict()
 export const contentSchema = z
@@ -357,12 +359,21 @@ const fieldNames: Record<string, string> = {
   endDate: '结束时间',
   description: '描述',
 }
+const itemLabelsByKind: Partial<Record<SectionKind, Partial<Record<ItemField, string>>>> = {
+  work: { title: '职位', organization: '公司', location: '工作地点' },
+  overview: { title: '职位', organization: '公司' },
+  project: { title: '项目名称', organization: '公司或组织' },
+  education: { title: '专业与学位', organization: '学校' },
+}
+/** 编辑器和简历上「直接编辑」共用的字段名，按区块类型变化 */
+export const itemLabel = (kind: SectionKind, field: ItemField) =>
+  itemLabelsByKind[kind]?.[field] ?? fieldNames[field]
 export function targetLabel(content: ResumeContent, target: Target): string {
   if (target.kind === 'profile') return fieldNames[target.field]
   const section = content.sections.find((s) => s.id === target.sectionId)
   if (target.kind === 'section') return `${section?.title || '已删除章节'} · ${fieldNames[target.field]}`
   const item = section?.items.find((i) => i.id === target.itemId)
-  return `${section?.title || '已删除章节'} · ${item?.title || item?.organization || '经历'} · ${fieldNames[target.field]}`
+  return `${section?.title || '已删除章节'} · ${item?.title || item?.organization || '经历'} · ${section ? itemLabel(section.kind, target.field) : fieldNames[target.field]}`
 }
 export function applySuggestions(doc: ResumeDocument, ids: string[]): ResumeDocument {
   if (!ids.length) throw new Error('请先选择建议')
@@ -489,18 +500,46 @@ function monthIndex(value: string, end: boolean, today: Date): number | null {
   if (month < 1 || month > 12) return null
   return Number(match[1]) * 12 + month - 1
 }
-/** 职业概览：工作经历区块里的经历条目，加上去掉重叠时段后的总月数；有任何一段日期认不出时总月数为 null */
-export function careerOverview(content: ResumeContent, today = new Date()) {
-  const items = content.sections
+const workRow = (item: ResumeItem) => [item.title, item.organization, item.startDate, item.endDate]
+const workSnapshot = (content: ResumeContent) => JSON.stringify(overviewRows(content).map(workRow))
+/** 按工作经历生成职业概览的行，只带时间、公司和职位；生成后就是概览自己的条目，用户可以随意改 */
+export function overviewRows(content: ResumeContent): ResumeItem[] {
+  return content.sections
     .filter((section) => section.kind === 'work')
     .flatMap((section) => section.items)
     .filter((item) => item.layout !== 'text' && (item.title || item.organization))
-  const ranges = items.map((item) => [
+    .map((item) => ({
+      ...createItem(),
+      title: item.title,
+      organization: item.organization,
+      startDate: item.startDate,
+      endDate: item.endDate,
+    }))
+}
+/** 用当前工作经历重新填写概览的行，补充说明（自由文本）原样保留 */
+export function regenerateOverview(section: ResumeSection, content: ResumeContent): ResumeSection {
+  return {
+    ...section,
+    items: [...section.items.filter((item) => item.layout === 'text'), ...overviewRows(content)],
+    syncedWork: workSnapshot(content),
+  }
+}
+/** 工作经历在上次生成或用户选择「保持现状」之后有没有变化；用户改概览自己的行不算 */
+export const overviewOutdated = (section: ResumeSection, content: ResumeContent) =>
+  section.syncedWork !== workSnapshot(content)
+export const acknowledgeOverview = (section: ResumeSection, content: ResumeContent): ResumeSection => ({
+  ...section,
+  syncedWork: workSnapshot(content),
+})
+/** 概览里各行去掉重叠时段后的总月数；有任何一行日期认不出时返回 null */
+export function careerMonths(items: ResumeItem[], today = new Date()): number | null {
+  const rows = items.filter((item) => item.layout !== 'text')
+  const ranges = rows.map((item) => [
     monthIndex(item.startDate, false, today),
     monthIndex(item.endDate, true, today),
   ])
-  if (!items.length || ranges.some(([start, end]) => start === null || end === null || start > end))
-    return { items, months: null }
+  if (!rows.length || ranges.some(([start, end]) => start === null || end === null || start > end))
+    return null
   let months = 0
   let covered = -Infinity
   for (const [start, end] of (ranges as [number, number][]).sort((a, b) => a[0] - b[0])) {
@@ -508,7 +547,12 @@ export function careerOverview(content: ResumeContent, today = new Date()) {
     if (end >= from) months += end - from + 1
     covered = Math.max(covered, end + 1)
   }
-  return { items, months }
+  return months
+}
+/** 概览标题旁显示的自动年限；算不出来时返回空字符串 */
+export function autoCareerLength(section: ResumeSection, locale: string) {
+  const months = careerMonths(section.items)
+  return months === null ? '' : formatCareerLength(months, locale)
 }
 export function formatCareerLength(months: number, locale: string) {
   const years = Math.floor(months / 12)

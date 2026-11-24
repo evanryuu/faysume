@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { NativeSelectOption, NativeSelect } from '@/components/ui/native-select'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   ArrowLeft,
@@ -23,13 +23,16 @@ import {
 } from 'lucide-react'
 import { db, mutateResume, insertResume } from '../db'
 import {
+  acknowledgeOverview,
   applySuggestions,
-  careerOverview,
+  autoCareerLength,
   cloneResume,
   createItem,
   createSection,
-  formatCareerLength,
+  overviewOutdated,
+  overviewRows,
   readTarget,
+  regenerateOverview,
   revertHistory,
   targetLabel,
   writeTarget,
@@ -41,7 +44,15 @@ import { defaultAppearance, resolveAppearance } from '../appearance'
 import DirectChat from './DirectChat'
 import { mergeMarkdownStyle } from '../markdownAppearance'
 import SuggestionDiff from './SuggestionDiff'
-import type { AIConnection, ProfileField, ResumeDocument, SectionKind, Target, Template } from '../types'
+import type {
+  AIConnection,
+  ProfileField,
+  ResumeDocument,
+  ResumeSection,
+  SectionKind,
+  Target,
+  Template,
+} from '../types'
 import PaginatedPreview from './PaginatedPreview'
 import ResumeItemEditor from './ResumeItemEditor'
 import JobDialog from './JobDialog'
@@ -49,6 +60,33 @@ import AddExperienceDialog from './AddExperienceDialog'
 import { Field, Modal, errorMessage, type Notify } from './ui'
 
 import type { EditorTab } from '../navigation'
+
+const overviewTipKey = 'faysume.overview-tip'
+/** 保存时字段顺序可能变，按固定顺序取出内容再比较，用来判断重新生成之后用户有没有再改过 */
+const sectionKey = (section: ResumeSection) =>
+  JSON.stringify([
+    section.title,
+    section.careerLength ?? '',
+    section.syncedWork ?? '',
+    section.items.map((i) => [
+      i.id,
+      i.layout,
+      i.title,
+      i.organization,
+      i.location,
+      i.startDate,
+      i.endDate,
+      i.description,
+    ]),
+  ])
+const sectionOptions: [SectionKind, string, string][] = [
+  ['work', '工作经历', '职位、公司和在职时间'],
+  ['project', '项目经历', '项目名称、你的角色和成果'],
+  ['education', '教育背景', '学校、专业和学位'],
+  ['skills', '技能', '技能、证书或语言'],
+  ['overview', '职业概览', '把每段工作的时间、公司和职位列在一起，可自由修改'],
+  ['other', '自定义区块', '获奖、开源、志愿者等其他内容'],
+]
 export default function Editor({
   document,
   connection,
@@ -78,7 +116,20 @@ export default function Editor({
     [aiView, setAiView] = useState<'chat' | 'review'>('chat'),
     [contextOpen, setContextOpen] = useState(false),
     [discussion, setDiscussion] = useState<{ text: string } | null>(null),
-    [adding, setAdding] = useState<SectionKind>('work'),
+    [regenerating, setRegenerating] = useState<string | null>(null),
+    [undoOverview, setUndoOverview] = useState<{
+      documentId: string
+      before: ResumeSection
+      after: string
+    } | null>(null),
+    [scrollTarget, setScrollTarget] = useState<string | null>(null),
+    [overviewTipHidden, setOverviewTipHidden] = useState(() => {
+      try {
+        return localStorage.getItem(overviewTipKey) === 'hidden'
+      } catch {
+        return false
+      }
+    }),
     [deleting, setDeleting] = useState<{ sectionId: string; itemId?: string } | null>(null)
   const materials = useLiveQuery(() => db.materials.orderBy('updatedAt').reverse().toArray(), [], [])
   const selectedMaterials = workflowFor(document).materialIds
@@ -92,8 +143,28 @@ export default function Editor({
     [document.id, document.sourceIds.join(',')],
     [],
   )
-  const overview = careerOverview(document.content)
-  const autoLength = overview.months !== null ? formatCareerLength(overview.months, document.locale) : ''
+  const workRowCount = overviewRows(document.content).length
+  const hasOverview = document.content.sections.some((s) => s.kind === 'overview')
+  const autoLength = (section: ResumeSection) => autoCareerLength(section, document.locale)
+  // 按钮点完会从页面上消失，把焦点交给对应区块的标题输入框，免得键盘用户回到页面顶部
+  const focusSection = (sectionId?: string) =>
+    requestAnimationFrame(() =>
+      window.document
+        .querySelector<HTMLInputElement>(
+          sectionId ? `[data-section-id="${sectionId}"] input` : '[data-section-id] input',
+        )
+        ?.focus({ preventScroll: true }),
+    )
+  // 新区块可能插在列表中间（职业概览放在工作经历前），等它渲染出来再滚过去
+  useEffect(() => {
+    if (!scrollTarget) return
+    const node = window.document.querySelector(`[data-section-id="${scrollTarget}"]`)
+    if (!node) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    node.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' })
+    node.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true })
+    setScrollTarget(null)
+  }, [scrollTarget, document.content.sections])
   const change = async (mutate: (doc: ResumeDocument) => ResumeDocument) => {
     try {
       await mutateResume(document.id, mutate)
@@ -152,6 +223,41 @@ export default function Editor({
       ;[items[index], items[index + offset]] = [items[index + offset], items[index]]
       return doc
     })
+  const addSection = (kind: SectionKind) => {
+    const section = createSection(kind)
+    setScrollTarget(section.id)
+    void change((doc) => {
+      if (kind === 'overview') {
+        const work = doc.content.sections.findIndex((s) => s.kind === 'work')
+        doc.content.sections.splice(
+          work < 0 ? doc.content.sections.length : work,
+          0,
+          regenerateOverview(section, doc.content),
+        )
+        return doc
+      }
+      section.items.push(createItem(kind === 'skills' || kind === 'other' ? 'text' : 'entry'))
+      doc.content.sections.push(section)
+      return doc
+    })
+  }
+  const updateSection = (sectionId: string, next: (section: ResumeSection) => ResumeSection) =>
+    change((doc) => ({
+      ...doc,
+      content: {
+        ...doc.content,
+        sections: doc.content.sections.map((s) => (s.id === sectionId ? next(s) : s)),
+      },
+    }))
+  const hideOverviewTip = () => {
+    setOverviewTipHidden(true)
+    try {
+      localStorage.setItem(overviewTipKey, 'hidden')
+    } catch {
+      // 浏览器禁止本地存储时，只在这次打开期间隐藏
+    }
+    focusSection()
+  }
   const addMaterials = () =>
     void change((doc) => {
       const section = createSection('project')
@@ -434,8 +540,38 @@ export default function Editor({
                     />
                   </div>
                 </div>
+                {!hasOverview && workRowCount >= 2 && !overviewTipHidden && (
+                  <div className="overview-tip" role="note">
+                    <p>
+                      <strong>可以加一个职业概览</strong>
+                      你已经有 {workRowCount}{' '}
+                      段工作经历。职业概览会把每段工作的时间、公司和职位列在一起，招聘方不用往下翻，也能先看到你的经历全貌。
+                    </p>
+                    <div>
+                      <Button
+                        variant="outline"
+                        size="default"
+                        type="button"
+                        className="button secondary small"
+                        onClick={() => addSection('overview')}
+                      >
+                        <Plus size={15} />
+                        添加职业概览
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="layout"
+                        type="button"
+                        className="text-button"
+                        onClick={hideOverviewTip}
+                      >
+                        不再提示
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {document.content.sections.map((section, index) => (
-                  <div className="editor-section" key={section.id}>
+                  <div className="editor-section" key={section.id} data-section-id={section.id}>
                     <div className="section-tools">
                       <Field
                         label="区块标题"
@@ -487,9 +623,11 @@ export default function Editor({
                           label="总年限"
                           value={section.careerLength ?? ''}
                           placeholder={
-                            autoLength
-                              ? `留空则自动计算：${autoLength}`
-                              : '工作经历的日期不完整，暂时无法自动计算'
+                            autoLength(section)
+                              ? `留空则自动计算：${autoLength(section)}`
+                              : section.items.some((item) => item.layout !== 'text')
+                                ? '有一行的日期不完整，暂时无法自动计算'
+                                : '还没有任何一行，添加后会自动计算'
                           }
                           onCommit={(value, before) =>
                             write(
@@ -517,25 +655,56 @@ export default function Editor({
                           </Button>
                         )}
                         <p className="hint">
-                          {overview.items.length
-                            ? '下面的时间、公司和职位来自工作经历区块，在那里修改后会自动更新。'
-                            : '还没有工作经历条目。添加工作经历后，这里会自动列出时间、公司和职位。'}
+                          下面每一行的时间、公司和职位都可以直接修改，也可以删除、调整顺序或手动加一行。
                         </p>
-                        {!!overview.items.length && (
-                          <ul className="overview-source">
-                            {overview.items.map((item) => (
-                              <li key={item.id}>
-                                {[
-                                  [item.startDate, item.endDate].filter(Boolean).join(' — '),
-                                  item.organization,
-                                  item.title,
-                                ]
-                                  .filter(Boolean)
-                                  .join(' · ')}
-                              </li>
-                            ))}
-                          </ul>
+                        {overviewOutdated(section, document.content) && (
+                          <div className="overview-notice" role="status">
+                            <p>工作经历有更新，职业概览还是之前的内容。</p>
+                            <div>
+                              <Button
+                                variant="outline"
+                                size="default"
+                                type="button"
+                                className="button secondary small"
+                                onClick={() => setRegenerating(section.id)}
+                              >
+                                按工作经历重新生成
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="layout"
+                                type="button"
+                                className="text-button"
+                                onClick={async () => {
+                                  await updateSection(section.id, (s) =>
+                                    acknowledgeOverview(s, document.content),
+                                  )
+                                  focusSection(section.id)
+                                }}
+                              >
+                                保持现状
+                              </Button>
+                            </div>
+                          </div>
                         )}
+                        {undoOverview?.documentId === document.id &&
+                          undoOverview.before.id === section.id &&
+                          undoOverview.after === sectionKey(section) && (
+                            <Button
+                              variant="ghost"
+                              size="layout"
+                              type="button"
+                              className="text-button"
+                              onClick={async () => {
+                                if (await updateSection(section.id, () => undoOverview.before))
+                                  setUndoOverview(null)
+                                focusSection(section.id)
+                              }}
+                            >
+                              <Undo2 size={14} />
+                              撤销重新生成
+                            </Button>
+                          )}
                       </div>
                     )}
                     {section.items.map((item, i) => (
@@ -543,6 +712,7 @@ export default function Editor({
                         key={item.id}
                         item={item}
                         sectionId={section.id}
+                        kind={section.kind}
                         index={i}
                         count={section.items.length}
                         write={write}
@@ -551,74 +721,57 @@ export default function Editor({
                       />
                     ))}
                     <div className="add-content-actions">
-                      {(section.kind === 'overview' ? (['text'] as const) : (['text', 'entry'] as const)).map(
-                        (layout) => (
-                          <Button
-                            key={layout}
-                            variant="secondary"
-                            className="button subtle"
-                            onClick={() =>
-                              void change((doc) => {
-                                doc.content.sections
-                                  .find((s) => s.id === section.id)!
-                                  .items.push(createItem(layout))
-                                return doc
-                              })
-                            }
-                          >
-                            <Plus size={15} />
-                            {layout === 'text'
-                              ? section.kind === 'overview'
-                                ? '添加补充说明'
-                                : '添加自由文本'
+                      {(['text', 'entry'] as const).map((layout) => (
+                        <Button
+                          key={layout}
+                          variant="secondary"
+                          className="button subtle"
+                          onClick={() =>
+                            void change((doc) => {
+                              doc.content.sections
+                                .find((s) => s.id === section.id)!
+                                .items.push(createItem(layout))
+                              return doc
+                            })
+                          }
+                        >
+                          <Plus size={15} />
+                          {section.kind === 'overview'
+                            ? layout === 'text'
+                              ? '添加补充说明'
+                              : '添加一行'
+                            : layout === 'text'
+                              ? '添加自由文本'
                               : '添加经历条目'}
-                          </Button>
-                        ),
-                      )}
+                        </Button>
+                      ))}
                     </div>
                   </div>
                 ))}
-                <div className="add-section">
-                  <NativeSelect
-                    aria-label="新增区块类型"
-                    value={adding}
-                    onChange={(e) => setAdding(e.target.value as SectionKind)}
-                  >
-                    <NativeSelectOption value="work">工作经历</NativeSelectOption>
-                    <NativeSelectOption value="project">项目经历</NativeSelectOption>
-                    <NativeSelectOption value="education">教育背景</NativeSelectOption>
-                    <NativeSelectOption value="skills">技能</NativeSelectOption>
-                    <NativeSelectOption value="overview">职业概览</NativeSelectOption>
-                    <NativeSelectOption value="other">自定义区块</NativeSelectOption>
-                  </NativeSelect>
-                  <Button
-                    variant="outline"
-                    size="default"
-                    type="button"
-                    className="button secondary"
-                    onClick={() =>
-                      void change((doc) => {
-                        const section = createSection(adding)
-                        if (adding === 'overview') {
-                          const work = doc.content.sections.findIndex((s) => s.kind === 'work')
-                          doc.content.sections.splice(
-                            work < 0 ? doc.content.sections.length : work,
-                            0,
-                            section,
-                          )
-                          return doc
-                        }
-                        section.items.push(
-                          createItem(adding === 'skills' || adding === 'other' ? 'text' : 'entry'),
-                        )
-                        doc.content.sections.push(section)
-                        return doc
-                      })
-                    }
-                  >
-                    <Plus size={16} />
-                    添加区块
-                  </Button>
+                <div className="add-section" role="group" aria-labelledby="add-section-title">
+                  <h3 id="add-section-title">添加区块</h3>
+                  <div className="section-options">
+                    {sectionOptions.map(([kind, label, description]) => {
+                      const added = kind === 'overview' && hasOverview
+                      return (
+                        <Button
+                          key={kind}
+                          variant="outline"
+                          size="layout"
+                          type="button"
+                          className="section-option"
+                          disabled={added}
+                          onClick={() => addSection(kind)}
+                        >
+                          <span className="section-option-title">
+                            <Plus size={14} aria-hidden="true" />
+                            {label}
+                          </span>
+                          <small>{added ? '已经添加过了' : description}</small>
+                        </Button>
+                      )
+                    })}
+                  </div>
                 </div>
               </>
             )}
@@ -998,6 +1151,49 @@ export default function Editor({
           onSettings={onSettings}
           notify={notify}
         />
+      )}
+      {regenerating && (
+        <Modal title="按工作经历重新生成职业概览？" onClose={() => setRegenerating(null)}>
+          <div className="modal-body">
+            <p>
+              职业概览里的每一行会换成当前工作经历的时间、公司和职位，你手动改过的行会被覆盖。补充说明和总年限不受影响。生成后可以点「撤销重新生成」恢复。
+            </p>
+            <div className="modal-actions">
+              <Button
+                variant="outline"
+                size="default"
+                type="button"
+                className="button secondary"
+                onClick={() => setRegenerating(null)}
+              >
+                取消
+              </Button>
+              <Button
+                variant="default"
+                size="default"
+                type="button"
+                className="button primary"
+                onClick={async () => {
+                  const previous = document.content.sections.find((s) => s.id === regenerating)
+                  if (previous) {
+                    // 撤销只在用户没再改过这个区块时出现，否则会把之后的修改一起撤掉
+                    const next = regenerateOverview(previous, document.content)
+                    if (await updateSection(regenerating, () => next))
+                      setUndoOverview({
+                        documentId: document.id,
+                        before: structuredClone(previous),
+                        after: sectionKey(next),
+                      })
+                  }
+                  setRegenerating(null)
+                  focusSection(regenerating)
+                }}
+              >
+                重新生成
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
       {deleting && (
         <Modal title="删除这段内容？" onClose={() => setDeleting(null)}>

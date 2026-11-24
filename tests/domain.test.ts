@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  acknowledgeOverview,
   applySuggestions,
-  careerOverview,
+  careerMonths,
   cloneResume,
   createExampleResume,
   createItem,
@@ -9,7 +10,11 @@ import {
   createSection,
   documentSchema,
   formatCareerLength,
+  itemLabel,
+  overviewOutdated,
+  overviewRows,
   readTarget,
+  regenerateOverview,
   revertHistory,
   targetLabel,
   validateContent,
@@ -199,48 +204,65 @@ describe('职业概览', () => {
     doc.content.sections = [work, education]
     return doc.content
   }
+  const rows = (...items: [string, string][]) =>
+    items.map(([startDate, endDate]) => ({ ...createItem(), startDate, endDate }))
 
-  it('只列出工作经历里的经历条目，保持简历里的顺序', () => {
+  it('按工作经历生成的行只带时间、公司和职位，保持简历里的顺序，并且是新的条目', () => {
     const c = content(
       ['产品设计师', '远山工作室', '2023.03', '至今'],
       ['交互设计师', '晨光科技', '2020.07', '2023.02'],
     )
+    c.sections[0].items[0].description = '不带进概览'
     c.sections[0].items.push({ ...createItem('text'), description: '自由文本不算一段经历' })
-    expect(careerOverview(c, today).items.map((item) => item.organization)).toEqual([
-      '远山工作室',
-      '晨光科技',
+    const generated = overviewRows(c)
+    expect(
+      generated.map((item) => [item.organization, item.title, item.startDate, item.description]),
+    ).toEqual([
+      ['远山工作室', '产品设计师', '2023.03', ''],
+      ['晨光科技', '交互设计师', '2020.07', ''],
     ])
+    expect(generated[0].id).not.toBe(c.sections[0].items[0].id)
   })
 
-  it('总月数包含首尾两个月，「至今」按当前月份算', () => {
-    const c = content(
-      ['产品设计师', '远山工作室', '2023.03', '至今'],
-      ['交互设计师', '晨光科技', '2020.07', '2023.02'],
-    )
-    expect(careerOverview(c, today).months).toBe(77)
+  it('总月数按概览自己的行计算，包含首尾两个月，「至今」按当前月份算，重叠时段只算一次', () => {
+    expect(careerMonths(rows(['2023.03', '至今'], ['2020.07', '2023.02']), today)).toBe(77)
+    expect(
+      careerMonths(rows(['2020-01', '2020-12'], ['2020年6月', '2021年3月'], ['2020/2', '2020/4']), today),
+    ).toBe(15)
+    expect(
+      careerMonths([...rows(['2020.01', '2020.12']), { ...createItem('text'), description: '说明' }], today),
+    ).toBe(12)
     expect(formatCareerLength(77, 'zh-CN')).toBe('共 6 年 5 个月')
     expect(formatCareerLength(12, 'zh-CN')).toBe('共 1 年')
     expect(formatCareerLength(14, 'en-US')).toBe('1 yr 2 mos')
   })
 
-  it('重叠的时间段只算一次', () => {
-    const c = content(
-      ['A', '甲', '2020-01', '2020-12'],
-      ['B', '乙', '2020年6月', '2021年3月'],
-      ['C', '丙', '2020/2', '2020/4'],
-    )
-    expect(careerOverview(c, today).months).toBe(15)
+  it('有一行日期认不出、缺失或前后颠倒时，不给出总月数', () => {
+    expect(careerMonths(rows(['Mar 2020', '2021.01']), today)).toBeNull()
+    expect(careerMonths(rows(['2020.01', '']), today)).toBeNull()
+    expect(careerMonths(rows(['2022.01', '2021.01']), today)).toBeNull()
+    expect(careerMonths([], today)).toBeNull()
   })
 
-  it('有一段日期认不出或缺失时，不给出总月数', () => {
-    expect(careerOverview(content(['A', '甲', 'Mar 2020', '2021.01']), today).months).toBeNull()
-    expect(careerOverview(content(['A', '甲', '2020.01', '']), today).months).toBeNull()
-    expect(careerOverview(content(['A', '甲', '2022.01', '2021.01']), today).months).toBeNull()
+  it('用户改概览自己的行不算过期；工作经历变了才提示，重新生成会保留补充说明，选择保持现状后不再提示', () => {
+    const c = content(['产品设计师', '远山工作室', '2023.03', '至今'])
+    const note = { ...createItem('text'), description: '补充说明' }
+    let overview = regenerateOverview({ ...createSection('overview'), items: [note] }, c)
+    expect(overview.items.map((item) => item.layout)).toEqual(['text', 'entry'])
+    expect(overviewOutdated(overview, c)).toBe(false)
+    overview.items[1].title = '高级产品设计师'
+    expect(overviewOutdated(overview, c)).toBe(false)
+    c.sections[0].items[0].endDate = '2025.06'
+    expect(overviewOutdated(overview, c)).toBe(true)
+    expect(overviewOutdated(acknowledgeOverview(overview, c), c)).toBe(false)
+    overview = regenerateOverview(overview, c)
+    expect(overview.items.map((item) => item.description || item.endDate)).toEqual(['补充说明', '2025.06'])
+    expect(overview.items[1].title).toBe('产品设计师')
   })
 
   it('职业概览区块的总年限可以手写、清空恢复自动，并能通过文档校验', () => {
     const doc = createResume()
-    const overview = createSection('overview')
+    const overview = regenerateOverview(createSection('overview'), doc.content)
     doc.content.sections = [overview]
     expect(overview.title).toBe('职业概览')
     const target = { kind: 'section', sectionId: overview.id, field: 'careerLength' } as const
@@ -251,5 +273,13 @@ describe('职业概览', () => {
     expect(documentSchema.safeParse(doc).success).toBe(true)
     doc.content = writeTarget(doc.content, target, '')
     expect(readTarget(doc.content, target)).toBe('')
+  })
+
+  it('字段名按区块类型变化，没有专门名称的类型用通用名称', () => {
+    expect(itemLabel('work', 'title')).toBe('职位')
+    expect(itemLabel('education', 'organization')).toBe('学校')
+    expect(itemLabel('project', 'title')).toBe('项目名称')
+    expect(itemLabel('other', 'title')).toBe('标题')
+    expect(itemLabel('work', 'startDate')).toBe('开始时间')
   })
 })

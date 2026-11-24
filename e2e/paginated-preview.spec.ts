@@ -99,10 +99,12 @@ for (const template of ['classic', 'modern', 'compact']) {
     await page.getByLabel('姓名', { exact: true }).fill('Page Preview')
     await page.getByLabel('姓名', { exact: true }).blur()
     await page.getByLabel('简历模板').selectOption(template)
-    await page.getByLabel('新增区块类型').selectOption('work')
-    await page.getByRole('button', { name: '添加区块', exact: true }).click()
-    await page.getByLabel('职位 / 项目 / 学位', { exact: true }).fill('Engineer')
-    await page.getByLabel('公司 / 学校', { exact: true }).fill('Example Company')
+    await page
+      .getByRole('group', { name: '添加区块' })
+      .getByRole('button', { name: /^工作经历/ })
+      .click()
+    await page.getByLabel('职位', { exact: true }).fill('Engineer')
+    await page.getByLabel('公司', { exact: true }).fill('Example Company')
     const body = page.getByRole('textbox', { name: '经历描述', exact: true })
     const lines = Array.from(
       { length: 95 },

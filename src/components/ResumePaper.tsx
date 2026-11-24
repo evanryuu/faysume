@@ -1,6 +1,6 @@
 import { appearanceStyle, resolveAppearance } from '../appearance'
-import { careerOverview, formatCareerLength } from '../domain'
-import type { ItemField, ProfileField, ResumeDocument, Target } from '../types'
+import { autoCareerLength, itemLabel } from '../domain'
+import type { ItemField, ProfileField, ResumeDocument, ResumeItem, ResumeSection, Target } from '../types'
 import EditablePaperText, { PaperText } from './EditablePaperText'
 
 function safeLink(value: string) {
@@ -49,8 +49,19 @@ export default function ResumePaper({
   const profile = (field: ProfileField, label: string, multiline = false, inline = false, placeholder = '') =>
     text(c[field], { kind: 'profile', field }, label, multiline, inline, placeholder)
   const zh = document.locale.startsWith('zh')
-  const overview = c.sections.some((s) => s.kind === 'overview') ? careerOverview(c) : null
-  const autoLength = overview?.months != null ? formatCareerLength(overview.months, document.locale) : ''
+  const autoLength = (section: ResumeSection) => autoCareerLength(section, document.locale)
+  const isOverviewRow = (section: ResumeSection, item: ResumeItem) =>
+    section.kind === 'overview' && item.layout !== 'text'
+  const rowText = (section: ResumeSection, item: ResumeItem, field: ItemField) =>
+    text(
+      item[field],
+      { kind: 'item', sectionId: section.id, itemId: item.id, field },
+      itemLabel(section.kind, field),
+      false,
+      true,
+      // 只在可编辑时给空格子留提示，打印和分页预览里不能出现这几个字
+      editable ? itemLabel(section.kind, field) : '',
+    )
   return (
     <article
       className={`resume-paper template-${document.template} ${miniature ? 'miniature' : ''}`}
@@ -107,7 +118,7 @@ export default function ResumePaper({
               false,
               section.kind === 'overview',
             )}
-            {section.kind === 'overview' && (section.careerLength || autoLength || editable) && (
+            {section.kind === 'overview' && (section.careerLength || autoLength(section) || editable) && (
               <>
                 {' '}
                 <span className="paper-overview-total">
@@ -117,58 +128,70 @@ export default function ResumePaper({
                     '总年限',
                     false,
                     true,
-                    autoLength,
+                    autoLength(section),
                   )}
                 </span>
               </>
             )}
           </h2>
-          {section.items.map((item) => {
-            const itemText = (field: ItemField, label: string, multiline = false, inline = false) =>
-              text(
-                item[field],
-                { kind: 'item', sectionId: section.id, itemId: item.id, field },
-                label,
-                multiline,
-                inline,
+          {section.items
+            .filter((item) => !isOverviewRow(section, item))
+            .map((item) => {
+              const itemText = (field: ItemField, label: string, multiline = false, inline = false) =>
+                text(
+                  item[field],
+                  { kind: 'item', sectionId: section.id, itemId: item.id, field },
+                  label,
+                  multiline,
+                  inline,
+                )
+              return (
+                <div className="paper-item" key={item.id}>
+                  {[item.title, item.organization, item.startDate, item.endDate, item.location].some(
+                    Boolean,
+                  ) && (
+                    <div className="paper-item-heading">
+                      <div>
+                        {item.title && <h3>{itemText('title', itemLabel(section.kind, 'title'))}</h3>}
+                        {item.organization && (
+                          <p className="paper-organization">
+                            {itemText('organization', itemLabel(section.kind, 'organization'))}
+                          </p>
+                        )}
+                      </div>
+                      <div className="paper-date">
+                        {item.startDate && itemText('startDate', '开始时间', false, true)}
+                        {item.startDate && item.endDate && ' — '}
+                        {item.endDate && itemText('endDate', '结束时间', false, true)}
+                        {item.location && (
+                          <span>{itemText('location', itemLabel(section.kind, 'location'))}</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {item.description && (
+                    <div className="paper-description">{itemText('description', '文本内容', true)}</div>
+                  )}
+                </div>
               )
-            return (
-              <div className="paper-item" key={item.id}>
-                {[item.title, item.organization, item.startDate, item.endDate, item.location].some(
-                  Boolean,
-                ) && (
-                  <div className="paper-item-heading">
-                    <div>
-                      {item.title && <h3>{itemText('title', '职位 / 项目 / 学位')}</h3>}
-                      {item.organization && (
-                        <p className="paper-organization">{itemText('organization', '公司 / 学校')}</p>
-                      )}
-                    </div>
-                    <div className="paper-date">
-                      {item.startDate && itemText('startDate', '开始时间', false, true)}
-                      {item.startDate && item.endDate && ' — '}
-                      {item.endDate && itemText('endDate', '结束时间', false, true)}
-                      {item.location && <span>{itemText('location', '地点')}</span>}
-                    </div>
-                  </div>
-                )}
-                {item.description && (
-                  <div className="paper-description">{itemText('description', '文本内容', true)}</div>
-                )}
-              </div>
-            )
-          })}
-          {section.kind === 'overview' && !!overview?.items.length && (
+            })}
+          {section.items.some((item) => isOverviewRow(section, item)) && (
             <ol>
-              {overview.items.map((item) => (
-                <li key={item.id}>
-                  <span className="paper-date">
-                    {[item.startDate, item.endDate].filter(Boolean).join(' — ')}
-                  </span>{' '}
-                  <span className="paper-overview-organization">{item.organization}</span>{' '}
-                  <span className="paper-overview-title">{item.title}</span>
-                </li>
-              ))}
+              {section.items
+                .filter((item) => isOverviewRow(section, item))
+                .map((item) => (
+                  <li key={item.id}>
+                    <span className="paper-date">
+                      {(item.startDate || editable) && rowText(section, item, 'startDate')}
+                      {((item.startDate && item.endDate) || editable) && ' — '}
+                      {(item.endDate || editable) && rowText(section, item, 'endDate')}
+                    </span>{' '}
+                    <span className="paper-overview-organization">
+                      {rowText(section, item, 'organization')}
+                    </span>{' '}
+                    <span className="paper-overview-title">{rowText(section, item, 'title')}</span>
+                  </li>
+                ))}
             </ol>
           )}
         </section>

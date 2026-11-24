@@ -18,8 +18,10 @@ export interface ResumeSection {
   title: string
   kind: SectionKind
   items: ResumeItem[]
-  /** 只给职业概览用：手写的总年限，空字符串表示按工作经历自动计算 */
+  /** 只给职业概览用：手写的总年限，空字符串表示按概览里各行的日期自动计算 */
   careerLength?: string
+  /** 只给职业概览用：上次生成或确认时的工作经历快照，用来判断要不要提示重新生成 */
+  syncedWork?: string
 }
 export interface ResumeContent {
   name: string
